@@ -111,13 +111,6 @@ export function App() {
     "--wallpaper-blur": `${tabState.wallpaper.blur}px`
   } as CSSProperties;
 
-  const wallpaperStyle =
-    tabState.wallpaper.type === "dataUrl" && tabState.wallpaper.value
-      ? {
-          backgroundImage: `linear-gradient(rgba(0, 0, 0, var(--wallpaper-dim)), rgba(0, 0, 0, var(--wallpaper-dim))), url(${tabState.wallpaper.value})`
-        }
-      : undefined;
-
   const activeFolder = activeFolderId
     ? tabState.folders.find((folder) => folder.id === activeFolderId) ?? null
     : null;
@@ -513,7 +506,11 @@ export function App() {
       className="new-tab"
       style={layoutStyle}
     >
-      <div className="wallpaper" style={wallpaperStyle} aria-hidden="true" />
+      <div className="wallpaper" aria-hidden="true">
+        {tabState.wallpaper.type === "dataUrl" && tabState.wallpaper.value ? (
+          <img className="wallpaper-media" src={tabState.wallpaper.value} alt="" />
+        ) : null}
+      </div>
       <section className="workspace" aria-label="New tab workspace">
         <div className="toolbar">
           <button
@@ -814,15 +811,11 @@ export function App() {
               <section className="settings-group">
                 <h2>Wallpaper</h2>
                 <div className="wallpaper-preview">
-                  <div
-                    className="wallpaper-preview-image"
-                    style={
-                      tabState.wallpaper.type === "dataUrl" && tabState.wallpaper.value
-                        ? { backgroundImage: `url(${tabState.wallpaper.value})` }
-                        : undefined
-                    }
-                    aria-hidden="true"
-                  />
+                  <div className="wallpaper-preview-image" aria-hidden="true">
+                    {tabState.wallpaper.type === "dataUrl" && tabState.wallpaper.value ? (
+                      <img src={tabState.wallpaper.value} alt="" />
+                    ) : null}
+                  </div>
                   <label className="wallpaper-preview-upload" aria-label="Upload wallpaper">
                     Upload
                     <input
