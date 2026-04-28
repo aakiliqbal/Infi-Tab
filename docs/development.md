@@ -139,20 +139,14 @@ Load the built extension from `dist/` through `chrome://extensions/` with Develo
 
 Release automation lives in `.github/workflows/release.yml`.
 
-The workflow is manual-only and uses Release Please:
+The workflow is manual-only and creates a release directly when run:
 
-- Conventional commits drive version bumps and changelog entries.
-- Running the `Release` workflow manually opens or updates a release PR.
-- The release PR updates `CHANGELOG.md`, `package.json`, `package-lock.json`, and `public/manifest.json`.
-- After the release PR is merged, running the `Release` workflow manually again creates the release, builds `dist/`, zips it, and attaches the zip to the GitHub release.
+- `package.json` and `public/manifest.json` must have the same version.
+- The workflow fails if the target tag already exists.
+- The workflow builds `dist/`, zips it, creates a `vX.Y.Z` GitHub release, and attaches the zip.
+- Release notes are generated from commit subjects since the previous tag.
 
-Use commit messages like:
-
-```text
-feat: add icon recommendations
-fix: preserve GIF wallpaper data
-chore: update release workflow
-```
+Before running the workflow, intentionally bump the version in both version files and commit that change.
 
 ## Current Known Gaps
 

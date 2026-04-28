@@ -5,33 +5,19 @@ on:
 
 permissions:
   contents: write
-  pull-requests: write
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
-  release-please:
-    name: Version and changelog
-    runs-on: ubuntu-latest
-    outputs:
-      release_created: ${{ steps.release.outputs.release_created }}
-      tag_name: ${{ steps.release.outputs.tag_name }}
-    steps:
-      - name: Run Release Please
-        id: release
-        uses: googleapis/release-please-action@v4
-        with:
-          config-file: release-please-config.json
-          manifest-file: .release-please-manifest.json
-
-  build-release:
-    name: Build extension release asset
-    needs: release-please
-    if: ${{ needs.release-please.outputs.release_created == 'true' }}
+  release:
+    name: Build and publish release
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          ref: ${{ needs.release-please.outputs.tag_name }}
+          fetch-depth: 0
 
       - name: Setup Node
         uses: actions/setup-node@v4
@@ -42,16 +28,58 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Read versions
+        id: version
+        run: |
+          PACKAGE_VERSION=$(node -p "require('./package.json').version")
+          MANIFEST_VERSION=$(node -p "require('./public/manifest.json').version")
+
+          if [ "$PACKAGE_VERSION" != "$MANIFEST_VERSION" ]; then
+            echo "package.json version ($PACKAGE_VERSION) must match public/manifest.json version ($MANIFEST_VERSION)." >&2
+            exit 1
+          fi
+
+          echo "version=$PACKAGE_VERSION" >> "$GITHUB_OUTPUT"
+          echo "tag=v$PACKAGE_VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Ensure tag does not exist
+        run: |
+          if git rev-parse "${{ steps.version.outputs.tag }}" >/dev/null 2>&1; then
+            echo "Tag ${{ steps.version.outputs.tag }} already exists. Bump the version before releasing." >&2
+            exit 1
+          fi
+
       - name: Build extension
         run: npm run build
 
       - name: Package extension
         run: |
           cd dist
-          zip -r ../infi-tab-${{ needs.release-please.outputs.tag_name }}.zip .
+          zip -r ../infi-tab-${{ steps.version.outputs.tag }}.zip .
 
-      - name: Upload release asset
+      - name: Generate changelog
+        id: changelog
+        run: |
+          PREVIOUS_TAG=$(git describe --tags --abbrev=0 2>/dev/null || true)
+
+          {
+            echo "## Infi Tab ${{ steps.version.outputs.tag }}"
+            echo
+            if [ -n "$PREVIOUS_TAG" ]; then
+              echo "Changes since $PREVIOUS_TAG:"
+              echo
+              git log "$PREVIOUS_TAG"..HEAD --pretty=format:"- %s (%h)"
+            else
+              echo "Initial release changes:"
+              echo
+              git log --pretty=format:"- %s (%h)"
+            fi
+          } > RELEASE_NOTES.md
+
+      - name: Create GitHub release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ needs.release-please.outputs.tag_name }}
-          files: infi-tab-${{ needs.release-please.outputs.tag_name }}.zip
+          tag_name: ${{ steps.version.outputs.tag }}
+          name: Infi Tab ${{ steps.version.outputs.tag }}
+          body_path: RELEASE_NOTES.md
+          files: infi-tab-${{ steps.version.outputs.tag }}.zip

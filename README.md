@@ -54,19 +54,12 @@ After each new build, click the extension card's reload button in `chrome://exte
 
 ## Releases
 
-Releases are manual and automated with Release Please when the `Release`
-workflow is run from GitHub Actions.
+Releases are manual. When you intentionally want a new version:
 
-Use conventional commits so versioning and changelog entries are generated correctly:
+1. Update `package.json` and `public/manifest.json` to the same version.
+2. Commit the version change.
+3. Run the `Release` workflow from GitHub Actions.
 
-```text
-feat: add wallpaper controls
-fix: persist shortcut icon uploads
-chore: update dependencies
-```
-
-When you intentionally want a new version, run the `Release` workflow manually.
-Release Please opens a release PR that updates `CHANGELOG.md`, `package.json`,
-`package-lock.json`, and `public/manifest.json`. After that release PR is
-merged, run the `Release` workflow again to create the GitHub release, build the
-extension, and attach a zipped `dist/` package to the release.
+The workflow builds the extension, creates a `vX.Y.Z` GitHub release from the
+current version, generates release notes from commits since the previous tag,
+and attaches a zipped `dist/` package to the release.
