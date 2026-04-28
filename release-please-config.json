@@ -1,0 +1,12 @@
+{
+  "packages": {
+    ".": {
+      "release-type": "node",
+      "package-name": "infi-tab",
+      "changelog-path": "CHANGELOG.md",
+      "extra-files": [
+        "public/manifest.json"
+      ]
+    }
+  }
+}
