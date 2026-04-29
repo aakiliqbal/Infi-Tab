@@ -11,6 +11,7 @@ export type QuickLink = {
     label: string;
     background: string;
     imageDataUrl?: string | null;
+    imageMediaId?: string | null;
     brandIconId?: BrandIconId | null;
   };
 };
@@ -65,6 +66,7 @@ export type TabState = {
   wallpaper: {
     type: "none" | "dataUrl";
     value: string | null;
+    mediaId: string | null;
     dim: number;
     blur: number;
   };
@@ -132,6 +134,7 @@ export const defaultTabState: TabState = {
   wallpaper: {
     type: "none",
     value: null,
+    mediaId: null,
     dim: 40,
     blur: 0
   },
@@ -315,11 +318,12 @@ function createQuickLink(
     id,
     title,
     url,
-    icon: {
-      type: brandIconId ? "brand" : "fallback",
-      label: title.slice(0, 1).toUpperCase(),
-      background,
-      brandIconId: brandIconId ?? null
-    }
-  };
+      icon: {
+        type: brandIconId ? "brand" : "fallback",
+        label: title.slice(0, 1).toUpperCase(),
+        background,
+        imageMediaId: null,
+        brandIconId: brandIconId ?? null
+      }
+    };
 }

@@ -24,6 +24,7 @@ import {
   upsertQuickLink
 } from "../../domain/tabOperations";
 import { readFileAsDataUrl } from "../../infrastructure/fileData";
+import { deleteMediaDataUrl } from "../../infrastructure/mediaStorage";
 import { loadTabState, saveTabState } from "../../infrastructure/tabStorage";
 import {
   emptyFolderDraft,
@@ -84,8 +85,8 @@ export function useNewTabController() {
     : [];
 
   async function persistState(nextState: TabState) {
-    setTabState(nextState);
-    await saveTabState(nextState);
+    const persistedState = await saveTabState(nextState);
+    setTabState(persistedState);
   }
 
   function moveToTilePage(nextState: TabState, type: "shortcut" | "folder", id: string) {
@@ -130,6 +131,7 @@ export function useNewTabController() {
       iconLabel: quickLink.icon.label,
       iconBackground: quickLink.icon.background,
       iconImageDataUrl: quickLink.icon.imageDataUrl ?? null,
+      iconMediaId: quickLink.icon.imageMediaId ?? null,
       brandIconId: quickLink.icon.brandIconId ?? null
     });
   }
@@ -161,6 +163,9 @@ export function useNewTabController() {
 
     const nextState = upsertQuickLink(tabState, nextQuickLink, quickLinkDraft);
     await persistState(nextState);
+    if (quickLinkDraft.iconMediaId && nextQuickLink.icon.type !== "image") {
+      await deleteMediaDataUrl(quickLinkDraft.iconMediaId);
+    }
     if (!quickLinkDraft.id && !quickLinkDraft.folderId) {
       moveToTilePage(nextState, "shortcut", nextQuickLink.id);
     }
@@ -173,6 +178,9 @@ export function useNewTabController() {
     }
 
     await persistState(deleteQuickLinkFromState(tabState, quickLinkDraft));
+    if (quickLinkDraft.iconMediaId) {
+      await deleteMediaDataUrl(quickLinkDraft.iconMediaId);
+    }
     setQuickLinkDraft(null);
   }
 
@@ -262,7 +270,8 @@ export function useNewTabController() {
     const iconDataUrl = await readFileAsDataUrl(file);
     setQuickLinkDraft({
       ...quickLinkDraft,
-      iconImageDataUrl: iconDataUrl
+      iconImageDataUrl: iconDataUrl,
+      iconMediaId: quickLinkDraft.iconMediaId
     });
   }
 
@@ -285,10 +294,14 @@ export function useNewTabController() {
         wallpaper: {
           type: "none",
           value: null,
+          mediaId: null,
           dim: tabState.wallpaper.dim,
           blur: tabState.wallpaper.blur
         }
       });
+      if (tabState.wallpaper.mediaId) {
+        await deleteMediaDataUrl(tabState.wallpaper.mediaId);
+      }
       setWallpaperMessage("Wallpaper reset.");
     } catch {
       setWallpaperMessage("Could not reset wallpaper.");

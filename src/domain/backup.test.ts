@@ -43,6 +43,37 @@ describe("parseTabStateBackup", () => {
     ]);
   });
 
+  it("keeps media payload references in portable backup state", () => {
+    const backup = {
+      schemaVersion: 1,
+      searchProvider: defaultTabState.searchProvider,
+      layout: defaultTabState.layout,
+      wallpaper: {
+        ...defaultTabState.wallpaper,
+        type: "dataUrl",
+        value: "data:image/gif;base64,R0lGODlhAQABAPAAAAAAAAAAACH5BAEAAAAALAAAAAABAAEAAAICRAEAOw==",
+        mediaId: "wallpaper-id"
+      },
+      quickLinks: [
+        {
+          ...defaultTabState.quickLinks[0],
+          icon: {
+            ...defaultTabState.quickLinks[0].icon,
+            type: "image",
+            imageDataUrl: "data:image/gif;base64,R0lGODlhAQABAPAAAAAAAAAAACH5BAEAAAAALAAAAAABAAEAAAICRAEAOw==",
+            imageMediaId: "icon-id"
+          }
+        }
+      ],
+      folders: defaultTabState.folders.slice(0, 1)
+    };
+
+    const parsed = parseTabStateBackup(backup);
+
+    expect(parsed.wallpaper.mediaId).toBe("wallpaper-id");
+    expect(parsed.quickLinks[0].icon.imageMediaId).toBe("icon-id");
+  });
+
   it("rejects invalid shapes", () => {
     expect(() => parseTabStateBackup(null)).toThrow("Unsupported backup schema");
     expect(() => parseTabStateBackup({ schemaVersion: 1 })).toThrow("Invalid backup shape");
