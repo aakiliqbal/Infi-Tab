@@ -8,6 +8,7 @@ export type QuickLinkDraft = {
   iconLabel: string;
   iconBackground: string;
   iconImageDataUrl: string | null;
+  iconMediaId: string | null;
   brandIconId: BrandIconId | null;
 };
 
@@ -26,6 +27,7 @@ export const emptyQuickLinkDraft: QuickLinkDraft = {
   iconLabel: "",
   iconBackground: "#2d8cff",
   iconImageDataUrl: null,
+  iconMediaId: null,
   brandIconId: null
 };
 

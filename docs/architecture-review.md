@@ -34,6 +34,16 @@ This file records the first architecture deepening pass.
 
 **Benefits:** File reading is isolated behind a tiny interface, making future IndexedDB/media work easier.
 
+### Media Storage
+
+**Files:** `src/infrastructure/mediaStorage.ts`, `src/infrastructure/tabStorage.ts`, `src/ui/hooks/useNewTabController.ts`
+
+**Problem:** Wallpaper and uploaded shortcut images lived in the main state blob, which made Chrome storage carry the full media payload and kept the backup/import path coupled to raw data URLs.
+
+**Solution:** Move media payloads into a dedicated IndexedDB-backed media module. The main tab state keeps stable media IDs, while load/save paths hydrate data URLs for rendering and strip them before writing to `chrome.storage.local`.
+
+**Benefits:** Local state stays lean, the storage boundary is clearer, and backup import/export can keep media portable without pushing large blobs through the main settings store.
+
 ### Quick Link Icon View
 
 **Files:** `src/ui/QuickLinkIcon.tsx`, `src/ui/App.tsx`
@@ -86,5 +96,4 @@ This file records the first architecture deepening pass.
 
 ## Remaining Deepening Opportunities
 
-1. Move media persistence behind a deeper module before implementing IndexedDB.
-2. Consider a small store module if the controller gains more cross-cutting state.
+1. Consider a small store module if the controller gains more cross-cutting state.

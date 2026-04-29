@@ -14,7 +14,7 @@ Infi Tab is a local-first Chrome new tab extension inspired by Infinity New Tab 
 - Folder tiles that open as modal overlays.
 - Shortcut editing with title, URL, fallback label/color, uploaded icon image, and Simple Icons recommendations.
 - Bundled default shortcuts with Simple Icons for common websites.
-- User-uploaded wallpaper, including GIFs.
+- User-uploaded wallpaper, including GIFs, stored in IndexedDB.
 - Wallpaper dim and blur controls.
 - Search provider presets: Google, Bing, Yahoo, Yandex, DuckDuckGo.
 - Search-box customization: hide box, hide category labels, hide search mark, size, rounded corners, opacity.
@@ -56,6 +56,7 @@ src/domain/brandIcons.ts      Curated Simple Icons registry and matching
 src/domain/tabOperations.ts   Shortcut, Folder, and layout mutation operations
 src/domain/backup.ts          Backup parsing and compatibility defaults
 src/infrastructure/fileData.ts  File-to-data-URL adapter
+src/infrastructure/mediaStorage.ts  IndexedDB media adapter and state hydration
 src/infrastructure/tabStorage.ts  Storage adapter
 CONTEXT.md                    Domain glossary and current decisions
 docs/architecture-review.md   Architecture deepening notes
@@ -72,7 +73,7 @@ Top-level fields:
 - `schemaVersion`: currently `1`.
 - `searchProvider`: active fixed search provider.
 - `layout`: search and grid customization settings.
-- `wallpaper`: wallpaper data URL plus dim/blur settings.
+- `wallpaper`: wallpaper data URL plus stable media ID, dim, and blur settings.
 - `quickLinks`: top-level shortcut tiles.
 - `folders`: folder tiles with contained shortcuts.
 
@@ -80,11 +81,11 @@ Top-level fields:
 
 - `fallback`: generated label and background color.
 - `brand`: bundled Simple Icons ID.
-- `image`: uploaded image data URL.
+- `image`: uploaded image data URL plus stable media ID.
 
 ## Storage
 
-Runtime state is persisted with `chrome.storage.local` through `src/infrastructure/tabStorage.ts`.
+Runtime state is persisted with `chrome.storage.local` through `src/infrastructure/tabStorage.ts`. Large wallpaper and uploaded shortcut images are stored in IndexedDB through `src/infrastructure/mediaStorage.ts`, while the JSON state keeps only stable media IDs.
 
 The manifest includes:
 
@@ -92,13 +93,13 @@ The manifest includes:
 "permissions": ["storage", "unlimitedStorage"]
 ```
 
-`unlimitedStorage` is used because wallpapers and GIFs are stored locally as data URLs and may exceed Chrome's normal storage quota.
+`unlimitedStorage` remains enabled for local-first storage headroom, but the large media payloads now live in IndexedDB instead of the main Chrome storage blob.
 
 When running outside Chrome extension context, the storage adapter falls back to `window.localStorage` so Vite development works in a normal browser tab.
 
 ## Backup And Restore
 
-JSON export serializes the full `TabState`, including wallpaper and uploaded icon data URLs.
+JSON export serializes the full `TabState`, including wallpaper and uploaded icon data URLs so backups stay portable.
 
 Import is replace-only:
 
@@ -107,7 +108,7 @@ Import is replace-only:
 3. User confirms replacement.
 4. Current state is replaced.
 
-Older backups missing newer wallpaper fields get defaults for `dim` and `blur`.
+Older backups missing newer wallpaper fields get defaults for `dim` and `blur`. On load, media IDs are hydrated back into data URLs from IndexedDB.
 
 Backup parsing lives in `src/domain/backup.ts` so import compatibility has a dedicated seam.
 
@@ -172,7 +173,6 @@ Before running the workflow, intentionally bump the version in both version file
 
 ## Current Known Gaps
 
-- Large media is stored directly in extension storage instead of IndexedDB.
 - Drag/drop lacks polished insertion and folder-combine previews.
 - Favicon lookup for unknown websites is not implemented.
 - Keyboard focus trapping for modals/drawer is not complete.

@@ -1,4 +1,5 @@
 import { defaultTabState, normalizeGridLayout, normalizeTopLevelTiles, type TabState } from "../domain/tabState";
+import { materializeTabStateMedia, stripResolvedMediaFromTabState } from "./mediaStorage";
 
 const storageKey = "infiTabState";
 
@@ -6,14 +7,13 @@ export async function loadTabState(): Promise<TabState> {
   const stored = await storageGet<Partial<TabState>>(storageKey);
 
   if (!stored || stored.schemaVersion !== defaultTabState.schemaVersion) {
-    await saveTabState(defaultTabState);
-    return defaultTabState;
+    return saveTabState(defaultTabState);
   }
 
   const quickLinks = stored.quickLinks ?? defaultTabState.quickLinks;
   const folders = stored.folders ?? defaultTabState.folders;
 
-  return {
+  const nextState = {
     ...defaultTabState,
     ...stored,
     quickLinks,
@@ -29,10 +29,16 @@ export async function loadTabState(): Promise<TabState> {
       gridLayout: normalizeGridLayout(stored.layout?.gridLayout, stored.layout)
     }
   };
+
+  const hydratedState = await materializeTabStateMedia(nextState);
+  await storageSet(storageKey, stripResolvedMediaFromTabState(hydratedState));
+  return hydratedState;
 }
 
-export async function saveTabState(state: TabState): Promise<void> {
-  await storageSet(storageKey, state);
+export async function saveTabState(state: TabState): Promise<TabState> {
+  const materializedState = await materializeTabStateMedia(state);
+  await storageSet(storageKey, stripResolvedMediaFromTabState(materializedState));
+  return materializedState;
 }
 
 async function storageGet<T>(key: string): Promise<T | null> {

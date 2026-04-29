@@ -52,6 +52,7 @@ export function createQuickLinkFromDraft(draft: QuickLinkDraft): QuickLink | nul
       label: matchedBrandIcon ? matchedBrandIcon.title.slice(0, 2).toUpperCase() : iconLabel,
       background: matchedBrandIcon ? `#${matchedBrandIcon.hex}` : draft.iconBackground,
       imageDataUrl: draft.iconImageDataUrl,
+      imageMediaId: draft.iconMediaId,
       brandIconId: matchedBrandIcon?.id ?? null
     }
   };
@@ -193,6 +194,7 @@ export function applyRecommendedIcon(draft: QuickLinkDraft, icon: BrandIcon): Qu
   return {
     ...draft,
     iconImageDataUrl: null,
+    iconMediaId: null,
     brandIconId: icon.id,
     iconBackground: `#${icon.hex}`,
     iconLabel: icon.title.slice(0, 2).toUpperCase()
