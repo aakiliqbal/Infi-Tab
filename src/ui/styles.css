@@ -13,8 +13,9 @@
 html,
 body,
 #root {
-  min-height: 100%;
+  height: 100%;
   margin: 0;
+  overflow: hidden;
 }
 
 button,
@@ -24,8 +25,12 @@ input {
 
 .new-tab {
   --icon-size: 86px;
-  --grid-gap: 34px;
+  --grid-column-gap: 34px;
+  --grid-row-gap: 34px;
   --grid-columns: 6;
+  --grid-rows: 2;
+  --quick-link-label-font-size: 16px;
+  --quick-link-tile-gap: 12px;
   --wallpaper-dim: 0.4;
   --wallpaper-blur: 0px;
   min-height: 100vh;
@@ -70,15 +75,18 @@ input {
   position: relative;
   z-index: 1;
   display: grid;
-  min-height: 100vh;
-  grid-template-rows: auto auto 1fr;
+  height: 100vh;
+  min-height: 0;
+  grid-template-rows: auto auto minmax(0, 1fr) 56px;
   justify-items: center;
   padding: 28px clamp(20px, 4vw, 72px) 58px;
+  overflow: hidden;
 }
 
 .toolbar {
   display: flex;
   width: 100%;
+  grid-row: 1;
   justify-content: flex-end;
   position: relative;
   z-index: 20;
@@ -232,6 +240,115 @@ input {
   accent-color: #2563eb;
 }
 
+.grid-layout-presets {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.grid-layout-presets button {
+  display: grid;
+  gap: 7px;
+  justify-items: center;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  background: #f8fafc;
+  color: #4b5563;
+  cursor: pointer;
+  font: inherit;
+  padding: 10px 8px;
+}
+
+.grid-layout-presets button.active {
+  border-color: #1f2937;
+  background: #ffffff;
+  color: #111827;
+}
+
+.grid-layout-preview {
+  display: block;
+  width: 74px;
+  height: 38px;
+  border-radius: 7px;
+  background:
+    linear-gradient(90deg, transparent 49%, rgba(0, 0, 0, 0.04) 50%, transparent 51%),
+    linear-gradient(180deg, transparent 49%, rgba(0, 0, 0, 0.04) 50%, transparent 51%),
+    #eef0f2;
+}
+
+.grid-layout-preview.custom {
+  display: grid;
+  place-items: center;
+  border: 1px solid #9ca3af;
+  background: #f8fafc;
+}
+
+.grid-layout-preview.custom svg {
+  width: 52%;
+  height: 52%;
+  stroke: #4b5563;
+  fill: none;
+}
+
+.layout-customize-backdrop {
+  position: fixed;
+  z-index: 60;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(7, 12, 13, 0.36);
+}
+
+.layout-customize-dialog {
+  position: relative;
+  display: grid;
+  width: min(450px, 100%);
+  gap: 20px;
+  border-radius: 8px;
+  background: #ffffff;
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.34);
+  color: #111827;
+  padding: 42px 48px 36px;
+}
+
+.layout-customize-dialog .modal-close {
+  position: absolute;
+  right: 18px;
+  top: 16px;
+}
+
+.layout-customize-dialog h2 {
+  margin: 0;
+  text-align: center;
+  font-size: 24px;
+  font-weight: 500;
+}
+
+.layout-customize-dialog label {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 10px 24px;
+  align-items: center;
+}
+
+.layout-customize-dialog label span {
+  grid-column: 1 / -1;
+  font-size: 16px;
+  color: #111827;
+}
+
+.layout-customize-dialog input[type="range"] {
+  width: 100%;
+  accent-color: #111827;
+}
+
+.layout-customize-dialog output {
+  min-width: 44px;
+  color: #374151;
+  text-align: right;
+}
+
 .toggle-row {
   display: flex;
   min-height: 32px;
@@ -357,6 +474,7 @@ input {
 }
 
 .search-panel {
+  grid-row: 2;
   width: min(var(--search-box-size), 100%);
   margin-top: clamp(44px, 10vh, 120px);
 }
@@ -421,20 +539,79 @@ input {
 
 .quick-link-grid {
   display: grid;
+  grid-row: 3;
   width: min(920px, 100%);
-  grid-template-columns: repeat(var(--grid-columns), minmax(82px, 1fr));
-  gap: var(--grid-gap);
+  height: 100%;
+  max-height: 100%;
+  grid-template-columns: repeat(var(--grid-columns), minmax(0, 1fr));
+  column-gap: var(--grid-column-gap);
+  row-gap: var(--grid-row-gap);
   align-content: start;
+  align-self: stretch;
   justify-items: center;
-  margin-top: clamp(58px, 9vh, 86px);
+  margin-top: 0;
+  padding-top: clamp(58px, 9vh, 86px);
+  overflow: hidden;
+  animation: shortcut-page-enter 180ms ease-out;
+}
+
+.shortcut-page-footer {
+  display: grid;
+  grid-row: 4;
+  min-height: 56px;
+  align-items: center;
+  justify-items: center;
+}
+
+.shortcut-page-dots {
+  display: flex;
+  gap: 14px;
+  justify-content: center;
+  padding-top: 18px;
+}
+
+.shortcut-page-dots button {
+  width: 12px;
+  height: 12px;
+  border: 0;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.38);
+  cursor: pointer;
+  padding: 0;
+}
+
+.shortcut-page-dots button.active,
+.shortcut-page-dots button[aria-current="page"] {
+  background: rgba(255, 255, 255, 0.96);
+}
+
+@keyframes shortcut-page-enter {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .quick-link-grid {
+    animation: none;
+  }
 }
 
 .quick-link {
   display: grid;
+  grid-template-rows: auto auto;
   width: 100%;
   min-width: 0;
+  min-height: 0;
+  align-content: start;
   justify-items: center;
-  gap: 12px;
+  gap: var(--quick-link-tile-gap);
   color: #ffffff;
   text-align: center;
   text-decoration: none;
@@ -500,7 +677,8 @@ input {
   max-width: 100%;
   overflow: hidden;
   color: rgba(255, 255, 255, 0.9);
-  font-size: 16px;
+  font-size: var(--quick-link-label-font-size);
+  line-height: 1.2;
   text-overflow: ellipsis;
   text-shadow: 0 1px 3px rgba(0, 0, 0, 0.42);
   white-space: nowrap;
@@ -557,16 +735,6 @@ input {
 
 .folder-icon {
   position: relative;
-}
-
-.folder-icon::before,
-.folder-add-icon::before {
-  content: "";
-  position: absolute;
-  inset: 18% 18% auto 18%;
-  height: 26%;
-  border-radius: 999px 999px 8px 8px;
-  background: rgba(255, 255, 255, 0.22);
 }
 
 .folder-count {

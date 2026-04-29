@@ -1,11 +1,10 @@
-import { CSSProperties, FormEvent, useEffect, useMemo, useState } from "react";
+import { CSSProperties, DragEvent, FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import { Folder as FolderIcon, FolderPlus as FolderPlusIcon } from "lucide-react";
 import {
-  brandIcons,
   findBrandIconRecommendations,
-  matchBrandIcon,
-  type BrandIcon,
-  type BrandIconId
+  type BrandIcon
 } from "../domain/brandIcons";
+import { parseTabStateBackup } from "../domain/backup";
 import {
   searchProviders,
   type Folder,
@@ -13,43 +12,39 @@ import {
   type SearchProviderId,
   type TabState
 } from "../domain/tabState";
+import {
+  applyRecommendedIcon,
+  createFolderFromDraft,
+  createQuickLinkFromDraft,
+  deleteFolderFromState,
+  deleteQuickLinkFromState,
+  moveTopLevelTileInState,
+  type ResolvedTopLevelTile,
+  resolveTopLevelTiles,
+  upsertFolder,
+  upsertQuickLink
+} from "../domain/tabOperations";
+import { readFileAsDataUrl } from "../infrastructure/fileData";
 import { loadTabState, saveTabState } from "../infrastructure/tabStorage";
+import { QuickLinkIcon } from "./QuickLinkIcon";
+import { SettingsDrawer } from "./SettingsDrawer";
+import {
+  emptyFolderDraft,
+  emptyQuickLinkDraft,
+  type FolderDraft,
+  type QuickLinkDraft
+} from "./drafts";
 
-type QuickLinkDraft = {
-  id: string | null;
-  folderId: string | null;
-  title: string;
-  url: string;
-  iconLabel: string;
-  iconBackground: string;
-  iconImageDataUrl: string | null;
-  brandIconId: BrandIconId | null;
-};
-
-type FolderDraft = {
-  id: string | null;
-  title: string;
-  iconLabel: string;
-  iconBackground: string;
-};
-
-const emptyQuickLinkDraft: QuickLinkDraft = {
-  id: null,
-  folderId: null,
-  title: "",
-  url: "",
-  iconLabel: "",
-  iconBackground: "#2d8cff",
-  iconImageDataUrl: null,
-  brandIconId: null
-};
-
-const emptyFolderDraft: FolderDraft = {
-  id: null,
-  title: "",
-  iconLabel: "",
-  iconBackground: "#64748b"
-};
+type ShortcutPageItem =
+  | ResolvedTopLevelTile
+  | {
+      key: "create:shortcut";
+      type: "create-shortcut";
+    }
+  | {
+      key: "create:folder";
+      type: "create-folder";
+    };
 
 export function App() {
   const [tabState, setTabState] = useState<TabState | null>(null);
@@ -60,8 +55,15 @@ export function App() {
   const [isSettingsDrawerOpen, setIsSettingsDrawerOpen] = useState(false);
   const [wallpaperMessage, setWallpaperMessage] = useState<string | null>(null);
   const [backupMessage, setBackupMessage] = useState<string | null>(null);
-  const [draggedQuickLinkId, setDraggedQuickLinkId] = useState<string | null>(null);
-  const [dragOverQuickLinkId, setDragOverQuickLinkId] = useState<string | null>(null);
+  const [draggedTopLevelTileKey, setDraggedTopLevelTileKey] = useState<string | null>(null);
+  const [dragOverTopLevelTileKey, setDragOverTopLevelTileKey] = useState<string | null>(null);
+  const [activeShortcutPage, setActiveShortcutPage] = useState(0);
+  const [maxFittedIconSize, setMaxFittedIconSize] = useState(104);
+  const [fittedLabelSize, setFittedLabelSize] = useState(16);
+  const [fittedTileGap, setFittedTileGap] = useState(12);
+  const gridRef = useRef<HTMLElement | null>(null);
+  const wheelDeltaRef = useRef(0);
+  const wheelLockUntilRef = useRef(0);
 
   useEffect(() => {
     void loadTabState().then(setTabState);
@@ -91,21 +93,175 @@ export function App() {
     return searchProviders[tabState.searchProvider];
   }, [tabState]);
 
+  const topLevelTiles = useMemo(() => (tabState ? resolveTopLevelTiles(tabState) : []), [tabState]);
+  const shortcutPageItems = useMemo<ShortcutPageItem[]>(
+    () => [
+      ...topLevelTiles,
+      { key: "create:shortcut", type: "create-shortcut" },
+      { key: "create:folder", type: "create-folder" }
+    ],
+    [topLevelTiles]
+  );
+  const pageCapacity = tabState ? tabState.layout.gridLayout.rows * tabState.layout.gridLayout.columns : 12;
+  const shortcutPageCount = Math.max(1, Math.ceil(shortcutPageItems.length / pageCapacity));
+  const activeShortcutPageIndex = Math.min(activeShortcutPage, shortcutPageCount - 1);
+  const visibleShortcutPageItems = shortcutPageItems.slice(
+    activeShortcutPageIndex * pageCapacity,
+    (activeShortcutPageIndex + 1) * pageCapacity
+  );
+  const hasOverlayOpen = isSettingsDrawerOpen || quickLinkDraft !== null || folderDraft !== null || activeFolderId !== null;
+
+  useEffect(() => {
+    if (activeShortcutPage >= shortcutPageCount) {
+      setActiveShortcutPage(shortcutPageCount - 1);
+    }
+  }, [activeShortcutPage, shortcutPageCount]);
+
+  useEffect(() => {
+    if (!tabState) {
+      return;
+    }
+
+    const gridLayout = tabState.layout.gridLayout;
+    const showLabels = tabState.layout.showLabels;
+
+    function measureFittedIconSize() {
+      const grid = gridRef.current;
+      if (!grid) {
+        return;
+      }
+
+      const gridBounds = grid.getBoundingClientRect();
+      const gridStyles = window.getComputedStyle(grid);
+      const columnGap = parseFloat(gridStyles.columnGap) || 0;
+      const rowGap = parseFloat(gridStyles.rowGap) || 0;
+      const paddingTop = parseFloat(gridStyles.paddingTop) || 0;
+      const rowHeight =
+        (gridBounds.height - paddingTop - rowGap * Math.max(0, gridLayout.rows - 1)) / gridLayout.rows;
+      const labelSize = showLabels ? Math.max(10, Math.min(16, Math.floor(rowHeight * 0.24))) : 0;
+      const tileGap = showLabels ? Math.max(3, Math.min(12, Math.floor(rowHeight * 0.08))) : 0;
+      const labelHeight = showLabels ? Math.ceil(labelSize * 1.2) : 0;
+      const widthAvailable =
+        (gridBounds.width - columnGap * Math.max(0, gridLayout.columns - 1)) / gridLayout.columns;
+      const heightAvailable = rowHeight - labelHeight - tileGap;
+
+      setFittedLabelSize(labelSize);
+      setFittedTileGap(tileGap);
+      setMaxFittedIconSize(Math.max(18, Math.floor(Math.min(104, widthAvailable, heightAvailable))));
+    }
+
+    measureFittedIconSize();
+    const resizeObserver = new ResizeObserver(measureFittedIconSize);
+    resizeObserver.observe(document.documentElement);
+    if (gridRef.current) {
+      resizeObserver.observe(gridRef.current);
+    }
+    window.addEventListener("resize", measureFittedIconSize);
+
+    return () => {
+      resizeObserver.disconnect();
+      window.removeEventListener("resize", measureFittedIconSize);
+    };
+  }, [
+    tabState,
+    tabState?.layout.gridLayout.rows,
+    tabState?.layout.gridLayout.columns,
+    tabState?.layout.gridLayout.columnSpacing,
+    tabState?.layout.gridLayout.lineSpacing,
+    tabState?.layout.showLabels,
+    tabState?.layout.hideSearchBox,
+    tabState?.layout.hideSearchCategory,
+    tabState?.layout.searchBoxSize
+  ]);
+
+  useEffect(() => {
+    if (!tabState || hasOverlayOpen || shortcutPageCount <= 1) {
+      return;
+    }
+
+    function movePage(direction: 1 | -1) {
+      setActiveShortcutPage((current) => {
+        if (direction > 0) {
+          return (current + 1) % shortcutPageCount;
+        }
+
+        return (current - 1 + shortcutPageCount) % shortcutPageCount;
+      });
+    }
+
+    function handleWheel(event: WheelEvent) {
+      if (isTextEntryControl(event.target)) {
+        return;
+      }
+
+      event.preventDefault();
+      const now = Date.now();
+      if (now < wheelLockUntilRef.current) {
+        return;
+      }
+
+      wheelDeltaRef.current += event.deltaY;
+      if (Math.abs(wheelDeltaRef.current) < 90) {
+        return;
+      }
+
+      movePage(wheelDeltaRef.current > 0 ? 1 : -1);
+      wheelDeltaRef.current = 0;
+      wheelLockUntilRef.current = now + 420;
+    }
+
+    function handlePageKey(event: KeyboardEvent) {
+      if (isTextEntryControl(event.target)) {
+        return;
+      }
+
+      if (event.key === "PageDown" || event.key === "ArrowRight") {
+        event.preventDefault();
+        movePage(1);
+      }
+
+      if (event.key === "PageUp" || event.key === "ArrowLeft") {
+        event.preventDefault();
+        movePage(-1);
+      }
+    }
+
+    window.addEventListener("wheel", handleWheel, { passive: false });
+    window.addEventListener("keydown", handlePageKey);
+
+    return () => {
+      window.removeEventListener("wheel", handleWheel);
+      window.removeEventListener("keydown", handlePageKey);
+    };
+  }, [hasOverlayOpen, shortcutPageCount, tabState]);
+
   if (!tabState) {
     return <main className="new-tab loading">Loading</main>;
   }
 
+  const searchBoxHeight = Math.max(44, (62 * tabState.layout.searchBoxSize) / 100);
+  const searchBoxRoundness = Math.min(100, Math.max(0, tabState.layout.searchBoxRadius));
+  const searchBoxRadius = (searchBoxHeight / 2) * (searchBoxRoundness / 100);
+  const gridLayout = tabState.layout.gridLayout;
+  const iconSize = Math.max(18, Math.min(maxFittedIconSize, (86 * gridLayout.iconSize) / 100));
+  const columnGap = (34 * gridLayout.columnSpacing) / 100;
+  const rowGap = (34 * gridLayout.lineSpacing) / 100;
+
   const layoutStyle = {
-    "--icon-size": `${tabState.layout.iconSize}px`,
-    "--grid-gap": `${tabState.layout.gridGap}px`,
-    "--grid-columns": `${tabState.layout.columns}`,
+    "--icon-size": `${iconSize}px`,
+    "--grid-column-gap": `${columnGap}px`,
+    "--grid-row-gap": `${rowGap}px`,
+    "--grid-columns": `${gridLayout.columns}`,
+    "--grid-rows": `${gridLayout.rows}`,
+    "--quick-link-label-font-size": `${fittedLabelSize}px`,
+    "--quick-link-tile-gap": `${fittedTileGap}px`,
     "--search-box-size": `${(680 * tabState.layout.searchBoxSize) / 100}px`,
-    "--search-box-height": `${Math.max(44, (62 * tabState.layout.searchBoxSize) / 100)}px`,
+    "--search-box-height": `${searchBoxHeight}px`,
     "--search-box-mark-size": `${Math.max(24, (32 * tabState.layout.searchBoxSize) / 100)}px`,
     "--search-box-font-size": `${Math.max(15, (18 * tabState.layout.searchBoxSize) / 100)}px`,
     "--search-category-font-size": `${Math.max(13, (16 * tabState.layout.searchBoxSize) / 100)}px`,
     "--search-category-gap": `${Math.max(14, (38 * tabState.layout.searchBoxSize) / 100)}px`,
-    "--search-box-radius": `${tabState.layout.searchBoxRadius}px`,
+    "--search-box-radius": `${searchBoxRadius}px`,
     "--search-box-opacity": `${tabState.layout.searchBoxOpacity / 100}`,
     "--wallpaper-dim": `${tabState.wallpaper.dim / 100}`,
     "--wallpaper-blur": `${tabState.wallpaper.blur}px`
@@ -160,6 +316,13 @@ export function App() {
     await saveTabState(nextState);
   }
 
+  function moveToTilePage(nextState: TabState, type: "shortcut" | "folder", id: string) {
+    const tileIndex = nextState.topLevelTiles.findIndex((tile) => tile.type === type && tile.id === id);
+    if (tileIndex >= 0) {
+      setActiveShortcutPage(Math.floor(tileIndex / pageCapacity));
+    }
+  }
+
   function openNewQuickLinkDialog() {
     setQuickLinkDraft({ ...emptyQuickLinkDraft, folderId: activeFolderId });
   }
@@ -197,64 +360,16 @@ export function App() {
       return;
     }
 
-    const title = quickLinkDraft.title.trim();
-    const url = normalizeUrl(quickLinkDraft.url);
-    const iconLabel = (quickLinkDraft.iconLabel.trim() || title.slice(0, 1) || "?")
-      .slice(0, 2)
-      .toUpperCase();
-    const matchedBrandIcon = quickLinkDraft.iconImageDataUrl
-      ? null
-      : quickLinkDraft.brandIconId
-        ? brandIcons[quickLinkDraft.brandIconId]
-        : matchBrandIcon(title, url);
-
-    if (!title || !url) {
+    const nextQuickLink = createQuickLinkFromDraft(quickLinkDraft);
+    if (!nextQuickLink) {
       return;
     }
 
-    const nextQuickLink: QuickLink = {
-      id: quickLinkDraft.id ?? crypto.randomUUID(),
-      title,
-      url,
-      icon: {
-        type: quickLinkDraft.iconImageDataUrl
-          ? "image"
-          : matchedBrandIcon
-            ? "brand"
-            : "fallback",
-        label: matchedBrandIcon ? matchedBrandIcon.title.slice(0, 2).toUpperCase() : iconLabel,
-        background: matchedBrandIcon ? `#${matchedBrandIcon.hex}` : quickLinkDraft.iconBackground,
-        imageDataUrl: quickLinkDraft.iconImageDataUrl,
-        brandIconId: matchedBrandIcon?.id ?? null
-      }
-    };
-
-    if (quickLinkDraft.folderId) {
-      const nextFolders = tabState.folders.map((folder) => {
-        if (folder.id !== quickLinkDraft.folderId) {
-          return folder;
-        }
-
-        const nextFolderQuickLinks = quickLinkDraft.id
-          ? folder.quickLinks.map((quickLink) =>
-              quickLink.id === quickLinkDraft.id ? nextQuickLink : quickLink
-            )
-          : [...folder.quickLinks, nextQuickLink];
-
-        return { ...folder, quickLinks: nextFolderQuickLinks };
-      });
-
-      await persistState({ ...tabState, folders: nextFolders });
-    } else {
-      const nextQuickLinks = quickLinkDraft.id
-        ? tabState.quickLinks.map((quickLink) =>
-            quickLink.id === quickLinkDraft.id ? nextQuickLink : quickLink
-          )
-        : [...tabState.quickLinks, nextQuickLink];
-
-      await persistState({ ...tabState, quickLinks: nextQuickLinks });
+    const nextState = upsertQuickLink(tabState, nextQuickLink, quickLinkDraft);
+    await persistState(nextState);
+    if (!quickLinkDraft.id && !quickLinkDraft.folderId) {
+      moveToTilePage(nextState, "shortcut", nextQuickLink.id);
     }
-
     setQuickLinkDraft(null);
   }
 
@@ -263,25 +378,7 @@ export function App() {
       return;
     }
 
-    if (quickLinkDraft.folderId) {
-      await persistState({
-        ...tabState,
-        folders: tabState.folders.map((folder) =>
-          folder.id === quickLinkDraft.folderId
-            ? {
-                ...folder,
-                quickLinks: folder.quickLinks.filter((quickLink) => quickLink.id !== quickLinkDraft.id)
-              }
-            : folder
-        )
-      });
-    } else {
-      await persistState({
-        ...tabState,
-        quickLinks: tabState.quickLinks.filter((quickLink) => quickLink.id !== quickLinkDraft.id)
-      });
-    }
-
+    await persistState(deleteQuickLinkFromState(tabState, quickLinkDraft));
     setQuickLinkDraft(null);
   }
 
@@ -292,34 +389,16 @@ export function App() {
       return;
     }
 
-    const title = folderDraft.title.trim();
-    const iconLabel = (folderDraft.iconLabel.trim() || title.slice(0, 1) || "?")
-      .slice(0, 2)
-      .toUpperCase();
-
-    if (!title) {
+    const nextFolder = createFolderFromDraft(tabState, folderDraft);
+    if (!nextFolder) {
       return;
     }
 
-    const nextFolder: Folder = {
-      id: folderDraft.id ?? crypto.randomUUID(),
-      title,
-      icon: {
-        type: "fallback",
-        label: iconLabel,
-        background: folderDraft.iconBackground
-      },
-      quickLinks: folderDraft.id
-        ? tabState.folders.find((folder) => folder.id === folderDraft.id)?.quickLinks ?? []
-        : []
-    };
-
-    const nextFolders = folderDraft.id
-      ? tabState.folders.map((folder) => (folder.id === folderDraft.id ? nextFolder : folder))
-      : [...tabState.folders, nextFolder];
-
-    await persistState({ ...tabState, folders: nextFolders });
-    setActiveFolderId(nextFolder.id);
+    const nextState = upsertFolder(tabState, nextFolder, folderDraft);
+    await persistState(nextState);
+    if (!folderDraft.id) {
+      moveToTilePage(nextState, "folder", nextFolder.id);
+    }
     setFolderDraft(null);
   }
 
@@ -328,10 +407,7 @@ export function App() {
       return;
     }
 
-    await persistState({
-      ...tabState,
-      folders: tabState.folders.filter((folder) => folder.id !== folderDraft.id)
-    });
+    await persistState(deleteFolderFromState(tabState, folderDraft.id));
 
     if (activeFolderId === folderDraft.id) {
       setActiveFolderId(null);
@@ -340,28 +416,17 @@ export function App() {
     setFolderDraft(null);
   }
 
-  async function moveQuickLink(targetQuickLinkId: string) {
-    if (!tabState || !draggedQuickLinkId || draggedQuickLinkId === targetQuickLinkId) {
+  async function moveTopLevelTile(targetTileKey: string) {
+    if (!tabState || !draggedTopLevelTileKey || draggedTopLevelTileKey === targetTileKey) {
       return;
     }
 
-    const fromIndex = tabState.quickLinks.findIndex((quickLink) => quickLink.id === draggedQuickLinkId);
-    const toIndex = tabState.quickLinks.findIndex((quickLink) => quickLink.id === targetQuickLinkId);
-
-    if (fromIndex < 0 || toIndex < 0) {
-      return;
-    }
-
-    const nextQuickLinks = [...tabState.quickLinks];
-    const [movedQuickLink] = nextQuickLinks.splice(fromIndex, 1);
-    nextQuickLinks.splice(toIndex, 0, movedQuickLink);
-
-    await persistState({ ...tabState, quickLinks: nextQuickLinks });
+    await persistState(moveTopLevelTileInState(tabState, draggedTopLevelTileKey, targetTileKey));
   }
 
   function finishDragging() {
-    setDraggedQuickLinkId(null);
-    setDragOverQuickLinkId(null);
+    setDraggedTopLevelTileKey(null);
+    setDragOverTopLevelTileKey(null);
   }
 
   async function uploadWallpaper(file: File | null) {
@@ -412,13 +477,7 @@ export function App() {
       return;
     }
 
-    setQuickLinkDraft({
-      ...quickLinkDraft,
-      iconImageDataUrl: null,
-      brandIconId: icon.id,
-      iconBackground: `#${icon.hex}`,
-      iconLabel: icon.title.slice(0, 2).toUpperCase()
-    });
+    setQuickLinkDraft(applyRecommendedIcon(quickLinkDraft, icon));
   }
 
   async function resetWallpaper() {
@@ -554,340 +613,163 @@ export function App() {
           </section>
         ) : null}
 
-        <section className="quick-link-grid" aria-label="Quick links">
-          {tabState.quickLinks.map((quickLink) => (
-            <a
-              className={[
-                "quick-link",
-                draggedQuickLinkId === quickLink.id ? "dragging" : "",
-                dragOverQuickLinkId === quickLink.id && draggedQuickLinkId !== quickLink.id ? "drag-over" : ""
-              ]
-                .filter(Boolean)
-                .join(" ")}
-              draggable
-              href={quickLink.url}
-              key={quickLink.id}
-              onDragStart={(event) => {
+        <section
+          className="quick-link-grid"
+          aria-label="Quick links"
+          key={`shortcut-page-${activeShortcutPageIndex}`}
+          ref={gridRef}
+        >
+          {visibleShortcutPageItems.map((tile) => {
+            if (tile.type === "create-shortcut") {
+              return (
+                <button className="quick-link add-link" type="button" key={tile.key} onClick={openNewQuickLinkDialog}>
+                  <span className="quick-link-icon add-link-icon" aria-hidden="true">
+                    +
+                  </span>
+                  <span className="quick-link-title">Add</span>
+                </button>
+              );
+            }
+
+            if (tile.type === "create-folder") {
+              return (
+                <button className="quick-link add-link" type="button" key={tile.key} onClick={openNewFolderDialog}>
+                  <span className="quick-link-icon add-link-icon folder-add-icon" aria-hidden="true">
+                    <FolderPlusIcon strokeWidth={2.25} />
+                  </span>
+                  <span className="quick-link-title">Folder</span>
+                </button>
+              );
+            }
+
+            const tileClassName = [
+              "quick-link",
+              tile.type === "folder" ? "folder-link" : "",
+              draggedTopLevelTileKey === tile.key ? "dragging" : "",
+              dragOverTopLevelTileKey === tile.key && draggedTopLevelTileKey !== tile.key ? "drag-over" : ""
+            ]
+              .filter(Boolean)
+              .join(" ");
+            const dragProps = {
+              draggable: true,
+              onDragStart: (event: DragEvent<HTMLElement>) => {
                 event.dataTransfer.effectAllowed = "move";
-                event.dataTransfer.setData("text/plain", quickLink.id);
-                setDraggedQuickLinkId(quickLink.id);
-              }}
-              onDragEnter={(event) => {
+                event.dataTransfer.setData("text/plain", tile.key);
+                setDraggedTopLevelTileKey(tile.key);
+              },
+              onDragEnter: (event: DragEvent<HTMLElement>) => {
                 event.preventDefault();
-                setDragOverQuickLinkId(quickLink.id);
-              }}
-              onDragOver={(event) => {
+                setDragOverTopLevelTileKey(tile.key);
+              },
+              onDragOver: (event: DragEvent<HTMLElement>) => {
                 event.preventDefault();
                 event.dataTransfer.dropEffect = "move";
-              }}
-              onDragLeave={(event) => {
+              },
+              onDragLeave: (event: DragEvent<HTMLElement>) => {
                 if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
-                  setDragOverQuickLinkId(null);
+                  setDragOverTopLevelTileKey(null);
                 }
-              }}
-              onDrop={(event) => {
+              },
+              onDrop: (event: DragEvent<HTMLElement>) => {
                 event.preventDefault();
-                void moveQuickLink(quickLink.id).finally(finishDragging);
-              }}
-              onDragEnd={finishDragging}
-            >
-              <QuickLinkIcon quickLink={quickLink} />
-              {tabState.layout.showLabels ? <span className="quick-link-title">{quickLink.title}</span> : null}
-              <button
-                className="quick-link-edit"
-                type="button"
-                aria-label={`Edit ${quickLink.title}`}
-                onClick={(event) => {
-                  event.preventDefault();
-                  openEditQuickLinkDialog(quickLink);
+                void moveTopLevelTile(tile.key).finally(finishDragging);
+              },
+              onDragEnd: finishDragging
+            };
+
+            if (tile.type === "shortcut") {
+              const { quickLink } = tile;
+              return (
+                <a className={tileClassName} href={quickLink.url} key={tile.key} {...dragProps}>
+                  <QuickLinkIcon quickLink={quickLink} />
+                  {tabState.layout.showLabels ? <span className="quick-link-title">{quickLink.title}</span> : null}
+                  <button
+                    className="quick-link-edit"
+                    type="button"
+                    aria-label={`Edit ${quickLink.title}`}
+                    onClick={(event) => {
+                      event.preventDefault();
+                      openEditQuickLinkDialog(quickLink);
+                    }}
+                  >
+                    Edit
+                  </button>
+                </a>
+              );
+            }
+
+            const { folder } = tile;
+            return (
+              <div
+                className={tileClassName}
+                key={tile.key}
+                role="button"
+                tabIndex={0}
+                onClick={() => setActiveFolderId(folder.id)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" || event.key === " ") {
+                    event.preventDefault();
+                    setActiveFolderId(folder.id);
+                  }
                 }}
+                {...dragProps}
               >
-                Edit
-              </button>
-            </a>
-          ))}
-          {tabState.folders.map((folder) => (
-            <div
-              className="quick-link folder-link"
-              key={folder.id}
-              role="button"
-              tabIndex={0}
-              onClick={() => setActiveFolderId(folder.id)}
-              onKeyDown={(event) => {
-                if (event.key === "Enter" || event.key === " ") {
-                  event.preventDefault();
-                  setActiveFolderId(folder.id);
-                }
-              }}
-            >
-              <span
-                className="quick-link-icon folder-icon"
-                style={{ backgroundColor: folder.icon.background }}
-                aria-hidden="true"
-              >
-                {folder.icon.label}
-                <span className="folder-count">{folder.quickLinks.length}</span>
-              </span>
-              {tabState.layout.showLabels ? <span className="quick-link-title">{folder.title}</span> : null}
-              <button
-                className="quick-link-edit"
-                type="button"
-                aria-label={`Edit ${folder.title}`}
-                onClick={(event) => {
-                  event.stopPropagation();
-                  openEditFolderDialog(folder);
-                }}
-              >
-                Edit
-              </button>
-            </div>
-          ))}
-          <button className="quick-link add-link" type="button" onClick={openNewQuickLinkDialog}>
-            <span className="quick-link-icon add-link-icon" aria-hidden="true">
-              +
-            </span>
-            <span className="quick-link-title">Add</span>
-          </button>
-          <button className="quick-link add-link" type="button" onClick={openNewFolderDialog}>
-            <span className="quick-link-icon add-link-icon folder-add-icon" aria-hidden="true">
-              +
-            </span>
-            <span className="quick-link-title">Folder</span>
-          </button>
+                <span
+                  className="quick-link-icon folder-icon"
+                  style={{ backgroundColor: folder.icon.background }}
+                  aria-hidden="true"
+                >
+                  <FolderIcon strokeWidth={2.25} />
+                  <span className="folder-count">{folder.quickLinks.length}</span>
+                </span>
+                {tabState.layout.showLabels ? <span className="quick-link-title">{folder.title}</span> : null}
+                <button
+                  className="quick-link-edit"
+                  type="button"
+                  aria-label={`Edit ${folder.title}`}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    openEditFolderDialog(folder);
+                  }}
+                >
+                  Edit
+                </button>
+              </div>
+            );
+          })}
         </section>
+        <nav className="shortcut-page-footer" aria-label="Shortcut pages">
+          {shortcutPageCount > 1 ? (
+            <div className="shortcut-page-dots">
+              {Array.from({ length: shortcutPageCount }, (_, index) => (
+                <button
+                  aria-label={`Go to shortcut page ${index + 1}`}
+                  aria-current={index === activeShortcutPageIndex ? "page" : undefined}
+                  className={index === activeShortcutPageIndex ? "active" : ""}
+                  key={index}
+                  onClick={() => setActiveShortcutPage(index)}
+                  type="button"
+                />
+              ))}
+            </div>
+          ) : null}
+        </nav>
       </section>
 
       {isSettingsDrawerOpen ? (
-        <div
-          className="settings-drawer-backdrop"
-          role="presentation"
-          onMouseDown={(event) => {
-            if (event.target === event.currentTarget) {
-              setIsSettingsDrawerOpen(false);
-            }
-          }}
-        >
-          <aside
-            className="settings-drawer"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="settings-drawer-title"
-          >
-            <header className="settings-drawer-header">
-              <div>
-                <span className="settings-drawer-kicker">Infi Tab</span>
-                <h1 id="settings-drawer-title">Settings</h1>
-              </div>
-              <button
-                className="drawer-close"
-                type="button"
-                onClick={() => setIsSettingsDrawerOpen(false)}
-                aria-label="Close settings"
-              >
-                x
-              </button>
-            </header>
-
-            <div className="settings-drawer-body">
-              <section className="settings-group">
-                <h2>Search</h2>
-                <label>
-                  <span>Provider</span>
-                  <select
-                    value={tabState.searchProvider}
-                    onChange={(event) => void changeSearchProvider(event.target.value as SearchProviderId)}
-                  >
-                    {Object.entries(searchProviders).map(([id, provider]) => (
-                      <option value={id} key={id}>
-                        {provider.label}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <label>
-                  <span>Hide search box</span>
-                  <input
-                    type="checkbox"
-                    checked={tabState.layout.hideSearchBox}
-                    onChange={(event) => void changeLayout("hideSearchBox", event.target.checked)}
-                  />
-                </label>
-                <label>
-                  <span>Hide search category</span>
-                  <input
-                    type="checkbox"
-                    checked={tabState.layout.hideSearchCategory}
-                    onChange={(event) => void changeLayout("hideSearchCategory", event.target.checked)}
-                  />
-                </label>
-                <label>
-                  <span>Hide search button</span>
-                  <input
-                    type="checkbox"
-                    checked={tabState.layout.hideSearchButton}
-                    onChange={(event) => void changeLayout("hideSearchButton", event.target.checked)}
-                  />
-                </label>
-                <label>
-                  <span>Search box size</span>
-                  <input
-                    type="range"
-                    min="55"
-                    max="100"
-                    step="5"
-                    value={tabState.layout.searchBoxSize}
-                    onChange={(event) => void changeLayout("searchBoxSize", Number(event.target.value))}
-                  />
-                </label>
-                <label>
-                  <span>Search box rounded corners</span>
-                  <input
-                    type="range"
-                    min="4"
-                    max="100"
-                    step="4"
-                    value={tabState.layout.searchBoxRadius}
-                    onChange={(event) => void changeLayout("searchBoxRadius", Number(event.target.value))}
-                  />
-                </label>
-                <label>
-                  <span>Search box opacity</span>
-                  <input
-                    type="range"
-                    min="35"
-                    max="100"
-                    step="5"
-                    value={tabState.layout.searchBoxOpacity}
-                    onChange={(event) => void changeLayout("searchBoxOpacity", Number(event.target.value))}
-                  />
-                </label>
-              </section>
-
-              <section className="settings-group">
-                <h2>Layout</h2>
-                <label>
-                  <span>Icon size</span>
-                  <input
-                    type="range"
-                    min="64"
-                    max="112"
-                    step="4"
-                    value={tabState.layout.iconSize}
-                    onChange={(event) => void changeLayout("iconSize", Number(event.target.value))}
-                  />
-                </label>
-                <label>
-                  <span>Spacing</span>
-                  <input
-                    type="range"
-                    min="18"
-                    max="52"
-                    step="2"
-                    value={tabState.layout.gridGap}
-                    onChange={(event) => void changeLayout("gridGap", Number(event.target.value))}
-                  />
-                </label>
-                <label>
-                  <span>Columns</span>
-                  <input
-                    type="range"
-                    min="3"
-                    max="8"
-                    step="1"
-                    value={tabState.layout.columns}
-                    onChange={(event) => void changeLayout("columns", Number(event.target.value))}
-                  />
-                </label>
-                <label>
-                  <span>Show labels</span>
-                  <input
-                    type="checkbox"
-                    checked={tabState.layout.showLabels}
-                    onChange={(event) => void changeLayout("showLabels", event.target.checked)}
-                  />
-                </label>
-              </section>
-
-              <section className="settings-group">
-                <h2>Wallpaper</h2>
-                <div className="wallpaper-preview">
-                  <div className="wallpaper-preview-image" aria-hidden="true">
-                    {tabState.wallpaper.type === "dataUrl" && tabState.wallpaper.value ? (
-                      <img src={tabState.wallpaper.value} alt="" />
-                    ) : null}
-                  </div>
-                  <label className="wallpaper-preview-upload" aria-label="Upload wallpaper">
-                    Upload
-                    <input
-                      accept="image/*"
-                      type="file"
-                      onChange={(event) => {
-                        void uploadWallpaper(event.target.files?.[0] ?? null);
-                        event.currentTarget.value = "";
-                      }}
-                    />
-                  </label>
-                </div>
-                <label>
-                  <span>Dim the wallpaper</span>
-                  <input
-                    type="range"
-                    min="0"
-                    max="80"
-                    step="5"
-                    value={tabState.wallpaper.dim}
-                    onChange={(event) => void changeWallpaperSetting("dim", Number(event.target.value))}
-                  />
-                </label>
-                <label>
-                  <span>Blur</span>
-                  <input
-                    type="range"
-                    min="0"
-                    max="24"
-                    step="1"
-                    value={tabState.wallpaper.blur}
-                    onChange={(event) => void changeWallpaperSetting("blur", Number(event.target.value))}
-                  />
-                </label>
-                <label className="upload-button">
-                  Upload wallpaper
-                  <input
-                    accept="image/*"
-                    type="file"
-                    onChange={(event) => {
-                      void uploadWallpaper(event.target.files?.[0] ?? null);
-                      event.currentTarget.value = "";
-                    }}
-                  />
-                </label>
-                <button className="launcher-action" type="button" onClick={() => void resetWallpaper()}>
-                  Reset wallpaper
-                </button>
-                {wallpaperMessage ? <p className="launcher-message">{wallpaperMessage}</p> : null}
-              </section>
-
-              <section className="settings-group">
-                <h2>Backup</h2>
-                <button className="launcher-action" type="button" onClick={exportBackup}>
-                  Export JSON backup
-                </button>
-                <label className="upload-button">
-                  Import JSON backup
-                  <input
-                    accept="application/json,.json"
-                    type="file"
-                    onChange={(event) => {
-                      void importBackup(event.target.files?.[0] ?? null);
-                      event.currentTarget.value = "";
-                    }}
-                  />
-                </label>
-                {backupMessage ? <p className="launcher-message">{backupMessage}</p> : null}
-              </section>
-            </div>
-          </aside>
-        </div>
+        <SettingsDrawer
+          backupMessage={backupMessage}
+          changeLayout={(key, value) => void changeLayout(key, value)}
+          changeSearchProvider={(providerId) => void changeSearchProvider(providerId)}
+          changeWallpaperSetting={(key, value) => void changeWallpaperSetting(key, value)}
+          close={() => setIsSettingsDrawerOpen(false)}
+          exportBackup={exportBackup}
+          importBackup={(file) => void importBackup(file)}
+          resetWallpaper={() => void resetWallpaper()}
+          tabState={tabState}
+          uploadWallpaper={(file) => void uploadWallpaper(file)}
+          wallpaperMessage={wallpaperMessage}
+        />
       ) : null}
 
       {activeFolder ? (
@@ -1145,9 +1027,7 @@ export function App() {
                   style={{ backgroundColor: folderDraft.iconBackground }}
                   aria-hidden="true"
                 >
-                  {(folderDraft.iconLabel || folderDraft.title.slice(0, 1) || "?")
-                    .slice(0, 2)
-                    .toUpperCase()}
+                  <FolderIcon strokeWidth={2.25} />
                 </span>
               </div>
 
@@ -1172,82 +1052,10 @@ export function App() {
   );
 }
 
-function normalizeUrl(url: string) {
-  const trimmedUrl = url.trim();
-
-  if (!trimmedUrl) {
-    return "";
+function isTextEntryControl(target: EventTarget | null) {
+  if (!(target instanceof HTMLElement)) {
+    return false;
   }
 
-  if (/^https?:\/\//i.test(trimmedUrl)) {
-    return trimmedUrl;
-  }
-
-  return `https://${trimmedUrl}`;
-}
-
-function QuickLinkIcon({ quickLink }: { quickLink: QuickLink }) {
-  const brandIcon =
-    quickLink.icon.type === "brand" && quickLink.icon.brandIconId
-      ? brandIcons[quickLink.icon.brandIconId]
-      : null;
-
-  return (
-    <span
-      className={`quick-link-icon ${
-        quickLink.icon.type === "image" || brandIcon ? "image-icon" : ""
-      }`}
-      style={{ backgroundColor: quickLink.icon.background }}
-      aria-hidden="true"
-    >
-      {quickLink.icon.type === "image" && quickLink.icon.imageDataUrl ? (
-        <img src={quickLink.icon.imageDataUrl} alt="" />
-      ) : brandIcon ? (
-        <svg viewBox="0 0 24 24" aria-hidden="true">
-          <path d={brandIcon.path} />
-        </svg>
-      ) : (
-        quickLink.icon.label
-      )}
-    </span>
-  );
-}
-
-async function readFileAsDataUrl(file: File) {
-  return new Promise<string>((resolve, reject) => {
-    const reader = new FileReader();
-    reader.addEventListener("load", () => resolve(String(reader.result)));
-    reader.addEventListener("error", () => reject(reader.error));
-    reader.readAsDataURL(file);
-  });
-}
-
-function parseTabStateBackup(value: unknown): TabState {
-  if (!isRecord(value) || value.schemaVersion !== 1) {
-    throw new Error("Unsupported backup schema");
-  }
-
-  const backup = value as TabState;
-  if (
-    !Array.isArray(backup.quickLinks) ||
-    !Array.isArray(backup.folders) ||
-    !isRecord(backup.layout) ||
-    !isRecord(backup.wallpaper) ||
-    !(backup.searchProvider in searchProviders)
-  ) {
-    throw new Error("Invalid backup shape");
-  }
-
-  return {
-    ...backup,
-    wallpaper: {
-      ...backup.wallpaper,
-      dim: typeof backup.wallpaper.dim === "number" ? backup.wallpaper.dim : 40,
-      blur: typeof backup.wallpaper.blur === "number" ? backup.wallpaper.blur : 0
-    }
-  };
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null;
+  return Boolean(target.closest("input, select, textarea, [contenteditable='true']"));
 }

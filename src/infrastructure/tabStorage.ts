@@ -1,25 +1,32 @@
-import { defaultTabState, type TabState } from "../domain/tabState";
+import { defaultTabState, normalizeGridLayout, normalizeTopLevelTiles, type TabState } from "../domain/tabState";
 
 const storageKey = "infiTabState";
 
 export async function loadTabState(): Promise<TabState> {
-  const stored = await storageGet<TabState>(storageKey);
+  const stored = await storageGet<Partial<TabState>>(storageKey);
 
   if (!stored || stored.schemaVersion !== defaultTabState.schemaVersion) {
     await saveTabState(defaultTabState);
     return defaultTabState;
   }
 
+  const quickLinks = stored.quickLinks ?? defaultTabState.quickLinks;
+  const folders = stored.folders ?? defaultTabState.folders;
+
   return {
     ...defaultTabState,
     ...stored,
+    quickLinks,
+    folders,
+    topLevelTiles: normalizeTopLevelTiles(stored.topLevelTiles, quickLinks, folders),
     wallpaper: {
       ...defaultTabState.wallpaper,
-      ...stored.wallpaper
+      ...(stored.wallpaper ?? {})
     },
     layout: {
       ...defaultTabState.layout,
-      ...stored.layout
+      ...(stored.layout ?? {}),
+      gridLayout: normalizeGridLayout(stored.layout?.gridLayout, stored.layout)
     }
   };
 }

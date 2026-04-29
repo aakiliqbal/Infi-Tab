@@ -21,7 +21,7 @@ Infi Tab is a local-first Chrome new tab extension inspired by Infinity New Tab 
 - Layout customization: icon size, grid spacing, column count, label visibility.
 - Right-side settings drawer opened by a gear button.
 - Full JSON export/import backup with replace-only restore.
-- Release automation with Release Please and GitHub Actions.
+- Manual release automation with GitHub Actions.
 
 ## Tech Stack
 
@@ -37,10 +37,18 @@ Infi Tab is a local-first Chrome new tab extension inspired by Infinity New Tab 
 public/manifest.json          Chrome extension manifest
 src/main.tsx                  React entry point
 src/ui/App.tsx                Main application state and UI
+src/ui/QuickLinkIcon.tsx      Shortcut icon rendering
+src/ui/SettingsDrawer.tsx     Settings Drawer rendering and controls
+src/ui/drafts.ts              Editor draft types and defaults
 src/ui/styles.css             Application styling
 src/domain/tabState.ts        App state types and default state
 src/domain/brandIcons.ts      Curated Simple Icons registry and matching
+src/domain/tabOperations.ts   Shortcut, Folder, and layout mutation operations
+src/domain/backup.ts          Backup parsing and compatibility defaults
+src/infrastructure/fileData.ts  File-to-data-URL adapter
 src/infrastructure/tabStorage.ts  Storage adapter
+CONTEXT.md                    Domain glossary and current decisions
+docs/architecture-review.md   Architecture deepening notes
 docs/roadmap-issues.md        Future issue backlog
 docs/development.md           Current development notes
 ```
@@ -91,6 +99,8 @@ Import is replace-only:
 
 Older backups missing newer wallpaper fields get defaults for `dim` and `blur`.
 
+Backup parsing lives in `src/domain/backup.ts` so import compatibility has a dedicated seam.
+
 ## Icons
 
 Brand icons are curated in `src/domain/brandIcons.ts`.
@@ -116,6 +126,8 @@ Current bundled icon set:
 When a shortcut is saved, the app tries to match a bundled Simple Icon using the title and URL. The shortcut editor also shows recommended icons based on the same matcher. If no match is found, the app uses fallback label/color. If the user uploads an icon image, the uploaded image wins.
 
 Simple Icons is CC0 as a package, but individual brand marks remain subject to their trademark guidelines.
+
+Shortcut and Folder mutation rules live in `src/domain/tabOperations.ts`. This module is the intended test surface for shortcut creation, folder edits, drag reorder, and icon matching.
 
 ## UI Decisions
 
@@ -159,3 +171,5 @@ Before running the workflow, intentionally bump the version in both version file
 - Chrome Web Store assets and privacy text are not prepared.
 
 See `docs/roadmap-issues.md` for issue-ready future slices.
+
+See `docs/architecture-review.md` for the latest architecture deepening pass.
