@@ -36,10 +36,15 @@ Infi Tab is a local-first Chrome new tab extension inspired by Infinity New Tab 
 ```text
 public/manifest.json          Chrome extension manifest
 src/main.tsx                  React entry point
-src/ui/App.tsx                Main application state and UI
+src/ui/App.tsx                New Tab Surface composition
+src/ui/hooks/useNewTabController.ts  State, persistence, and overlay actions
+src/ui/ShortcutGrid.tsx       Shortcut Page rendering and drag/drop
 src/ui/QuickLinkIcon.tsx      Shortcut icon rendering
-src/ui/SettingsDrawer.tsx     Settings Drawer rendering and controls
-src/ui/drafts.ts              Editor draft types and defaults
+src/ui/SettingsDrawer.tsx     Settings Drawer composition
+src/ui/settings/*             Search, Grid Layout, Wallpaper, and Backup sections
+src/ui/modals/*               Folder and shortcut modal overlays
+src/ui/model/drafts.ts        Editor draft types and defaults
+src/ui/hooks/useShortcutGridMetrics.ts  Grid fitting calculations
 src/ui/styles.css             Application styling
 src/domain/tabState.ts        App state types and default state
 src/domain/brandIcons.ts      Curated Simple Icons registry and matching

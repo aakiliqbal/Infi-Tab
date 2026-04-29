@@ -1,4 +1,4 @@
-import type { BrandIconId } from "../domain/brandIcons";
+import type { BrandIconId } from "../../domain/brandIcons";
 
 export type QuickLinkDraft = {
   id: string | null;

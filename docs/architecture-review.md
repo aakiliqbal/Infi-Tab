@@ -46,7 +46,7 @@ This file records the first architecture deepening pass.
 
 ### Draft Types
 
-**Files:** `src/ui/drafts.ts`, `src/ui/App.tsx`
+**Files:** `src/ui/model/drafts.ts`, `src/ui/App.tsx`
 
 **Problem:** Draft shape and empty draft defaults were mixed into the New Tab Surface implementation.
 
@@ -64,8 +64,28 @@ This file records the first architecture deepening pass.
 
 **Benefits:** Drawer layout changes have locality, while the New Tab Surface keeps leverage as the orchestration module for state and overlays.
 
+### New Tab Controller
+
+**Files:** `src/ui/hooks/useNewTabController.ts`, `src/ui/App.tsx`
+
+**Problem:** `App.tsx` still mixed state loading, persistence, overlay actions, drag state, and backup logic with layout rendering. That made the root module shallow even after the view extracted.
+
+**Solution:** Move the state machine and side-effectful actions into `useNewTabController`. The New Tab Surface now composes a controller hook, a shortcut grid, and separate modal/section modules.
+
+**Benefits:** State mutations and persistence now have a tighter seam. The controller hook is a better test surface than the full page, and the view layer can evolve without re-reading storage and backup code.
+
+### Feature Modals and Settings Sections
+
+**Files:** `src/ui/modals/*`, `src/ui/settings/*`, `src/ui/ShortcutGrid.tsx`
+
+**Problem:** Folder overlays, shortcut editors, and settings subsections were embedded in larger files, so small UI changes required editing a large orchestration module.
+
+**Solution:** Split the New Tab Surface into focused feature modules for the shortcut grid, folder panel, editor modals, and settings subsections.
+
+**Benefits:** Locality improves because each feature now has one obvious file. Leverage improves because the view layer can be assembled from smaller, easier-to-reason-about pieces.
+
 ## Remaining Deepening Opportunities
 
-1. Extract `ShortcutGrid` and `FolderOverlay` from `App.tsx` so grid behavior can evolve independently.
-2. Add automated tests around `tabOperations.ts` and `backup.ts`.
-3. Move media persistence behind a deeper module before implementing IndexedDB.
+1. Add automated tests around `tabOperations.ts`, `backup.ts`, and `src/ui/hooks/useNewTabController.ts`.
+2. Move media persistence behind a deeper module before implementing IndexedDB.
+3. Consider a small store module if the controller gains more cross-cutting state.

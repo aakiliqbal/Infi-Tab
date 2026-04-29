@@ -1,6 +1,6 @@
 import { brandIcons, matchBrandIcon, type BrandIcon } from "./brandIcons";
 import type { Folder, QuickLink, TabState, TopLevelTile } from "./tabState";
-import type { FolderDraft, QuickLinkDraft } from "../ui/drafts";
+import type { FolderDraft, QuickLinkDraft } from "../ui/model/drafts";
 
 export type ResolvedTopLevelTile =
   | {
