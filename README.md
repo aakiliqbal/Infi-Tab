@@ -35,6 +35,18 @@ Open:
 http://localhost:5173/
 ```
 
+Run unit tests:
+
+```bash
+npm test
+```
+
+Run the browser smoke test:
+
+```bash
+npm run test:smoke
+```
+
 ## Load in Chrome
 
 Build the extension:

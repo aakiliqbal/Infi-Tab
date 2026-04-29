@@ -86,6 +86,5 @@ This file records the first architecture deepening pass.
 
 ## Remaining Deepening Opportunities
 
-1. Add automated tests around `tabOperations.ts`, `backup.ts`, and `src/ui/hooks/useNewTabController.ts`.
-2. Move media persistence behind a deeper module before implementing IndexedDB.
-3. Consider a small store module if the controller gains more cross-cutting state.
+1. Move media persistence behind a deeper module before implementing IndexedDB.
+2. Consider a small store module if the controller gains more cross-cutting state.

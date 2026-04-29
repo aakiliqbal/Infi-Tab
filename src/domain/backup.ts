@@ -31,6 +31,33 @@ export function parseTabStateBackup(value: unknown): TabState {
   };
 }
 
+export function describeBackupReplacement(state: TabState): string {
+  const shortcutCount = state.quickLinks.length;
+  const folderCount = state.folders.length;
+
+  return `This will replace ${shortcutCount} shortcut${shortcutCount === 1 ? "" : "s"}, ${folderCount} folder${
+    folderCount === 1 ? "" : "s"
+  }, settings, and wallpaper.`;
+}
+
+export function getBackupImportErrorMessage(error: unknown): string {
+  if (error instanceof SyntaxError) {
+    return "The selected file is not valid JSON.";
+  }
+
+  if (error instanceof Error) {
+    if (error.message === "Unsupported backup schema") {
+      return "This backup uses an unsupported schema version.";
+    }
+
+    if (error.message === "Invalid backup shape") {
+      return "This backup file is missing required fields.";
+    }
+  }
+
+  return "Could not import this backup file.";
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
 }

@@ -21,6 +21,7 @@ Infi Tab is a local-first Chrome new tab extension inspired by Infinity New Tab 
 - Layout customization: icon size, grid spacing, column count, label visibility.
 - Right-side settings drawer opened by a gear button.
 - Full JSON export/import backup with replace-only restore.
+- Automated build checks plus unit and browser smoke tests.
 - Manual release automation with GitHub Actions.
 
 ## Tech Stack
@@ -46,6 +47,10 @@ src/ui/modals/*               Folder and shortcut modal overlays
 src/ui/model/drafts.ts        Editor draft types and defaults
 src/ui/hooks/useShortcutGridMetrics.ts  Grid fitting calculations
 src/ui/styles.css             Application styling
+tests/smoke.spec.ts           Browser smoke test
+src/domain/backup.test.ts     Backup parsing and migration tests
+vitest.config.ts              Unit test runner config
+playwright.config.ts          Browser smoke test config
 src/domain/tabState.ts        App state types and default state
 src/domain/brandIcons.ts      Curated Simple Icons registry and matching
 src/domain/tabOperations.ts   Shortcut, Folder, and layout mutation operations
@@ -167,8 +172,6 @@ Before running the workflow, intentionally bump the version in both version file
 
 ## Current Known Gaps
 
-- No automated browser smoke tests yet.
-- Backup import validation is minimal.
 - Large media is stored directly in extension storage instead of IndexedDB.
 - Drag/drop lacks polished insertion and folder-combine previews.
 - Favicon lookup for unknown websites is not implemented.

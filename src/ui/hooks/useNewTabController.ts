@@ -1,6 +1,10 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { findBrandIconRecommendations, type BrandIcon } from "../../domain/brandIcons";
-import { parseTabStateBackup } from "../../domain/backup";
+import {
+  describeBackupReplacement,
+  getBackupImportErrorMessage,
+  parseTabStateBackup
+} from "../../domain/backup";
 import {
   searchProviders,
   type Folder,
@@ -331,9 +335,7 @@ export function useNewTabController() {
       const backupText = await file.text();
       const parsedBackup = JSON.parse(backupText) as unknown;
       const nextState = parseTabStateBackup(parsedBackup);
-      const shouldReplace = window.confirm(
-        "Importing this backup will replace all current shortcuts, folders, settings, and wallpaper. Continue?"
-      );
+      const shouldReplace = window.confirm(`${describeBackupReplacement(nextState)} Continue?`);
 
       if (!shouldReplace) {
         setBackupMessage("Import cancelled.");
@@ -345,8 +347,8 @@ export function useNewTabController() {
       setQuickLinkDraft(null);
       setFolderDraft(null);
       setBackupMessage("Backup imported.");
-    } catch {
-      setBackupMessage("Could not import this backup file.");
+    } catch (error) {
+      setBackupMessage(getBackupImportErrorMessage(error));
     }
   }
 
