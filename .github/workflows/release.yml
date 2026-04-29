@@ -19,6 +19,12 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Ensure release runs from main
+        if: github.ref_name != 'main'
+        run: |
+          echo "Release workflow can only run from the main branch." >&2
+          exit 1
+
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
@@ -28,24 +34,35 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Read versions
+      - name: Determine release version
         id: version
         run: |
           PACKAGE_VERSION=$(node -p "require('./package.json').version")
-          MANIFEST_VERSION=$(node -p "require('./public/manifest.json').version")
+          NEXT_VERSION="$PACKAGE_VERSION"
 
-          if [ "$PACKAGE_VERSION" != "$MANIFEST_VERSION" ]; then
-            echo "package.json version ($PACKAGE_VERSION) must match public/manifest.json version ($MANIFEST_VERSION)." >&2
-            exit 1
-          fi
+          while git show-ref --tags --verify --quiet "refs/tags/v$NEXT_VERSION"; do
+            NEXT_VERSION=$(node -e "const [major, minor, patch] = '$NEXT_VERSION'.split('.').map(Number); console.log([major, minor, patch + 1].join('.'))")
+          done
 
-          echo "version=$PACKAGE_VERSION" >> "$GITHUB_OUTPUT"
-          echo "tag=v$PACKAGE_VERSION" >> "$GITHUB_OUTPUT"
+          node -e "const fs = require('fs'); const nextVersion = process.argv[1];
+const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
+pkg.version = nextVersion;
+fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2) + '\n');
+const lock = JSON.parse(fs.readFileSync('package-lock.json', 'utf8'));
+lock.version = nextVersion;
+if (lock.packages && lock.packages['']) lock.packages[''].version = nextVersion;
+fs.writeFileSync('package-lock.json', JSON.stringify(lock, null, 2) + '\n');
+const manifest = JSON.parse(fs.readFileSync('public/manifest.json', 'utf8'));
+manifest.version = nextVersion;
+fs.writeFileSync('public/manifest.json', JSON.stringify(manifest, null, 2) + '\n');" "$NEXT_VERSION"
+
+          echo "version=$NEXT_VERSION" >> "$GITHUB_OUTPUT"
+          echo "tag=v$NEXT_VERSION" >> "$GITHUB_OUTPUT"
 
       - name: Ensure tag does not exist
         run: |
-          if git rev-parse "${{ steps.version.outputs.tag }}" >/dev/null 2>&1; then
-            echo "Tag ${{ steps.version.outputs.tag }} already exists. Bump the version before releasing." >&2
+          if git show-ref --tags --verify --quiet "refs/tags/${{ steps.version.outputs.tag }}"; then
+            echo "Tag ${{ steps.version.outputs.tag }} already exists after version selection." >&2
             exit 1
           fi
 

@@ -68,10 +68,10 @@ After each new build, click the extension card's reload button in `chrome://exte
 
 Releases are manual. When you intentionally want a new version:
 
-1. Update `package.json` and `public/manifest.json` to the same version.
-2. Commit the version change.
-3. Run the `Release` workflow from GitHub Actions.
+1. Merge the release-ready changes to `main`.
+2. Run the `Release` workflow from GitHub Actions on `main`.
 
-The workflow builds the extension, creates a `vX.Y.Z` GitHub release from the
-current version, generates release notes from commits since the previous tag,
-and attaches a zipped `dist/` package to the release.
+The workflow checks out `main`, auto-advances the release version if the current
+tag already exists, syncs `package.json` and `public/manifest.json` for the
+build, generates release notes from commits since the previous tag, and
+attaches a zipped `dist/` package to the release.
