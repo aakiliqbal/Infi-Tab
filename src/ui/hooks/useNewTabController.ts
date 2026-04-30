@@ -218,12 +218,14 @@ export function useNewTabController() {
     setFolderDraft(null);
   }
 
-  async function moveTopLevelTile(targetTileKey: string) {
+  function moveTopLevelTile(targetTileKey: string) {
     if (!tabState || !draggedTopLevelTileKey || draggedTopLevelTileKey === targetTileKey) {
       return;
     }
 
-    await persistState(moveTopLevelTileInState(tabState, draggedTopLevelTileKey, targetTileKey));
+    const nextState = moveTopLevelTileInState(tabState, draggedTopLevelTileKey, targetTileKey);
+    setTabState(nextState);
+    void saveTabState(nextState).then(setTabState);
   }
 
   function finishDragging() {

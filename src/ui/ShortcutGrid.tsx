@@ -23,7 +23,7 @@ type ShortcutGridProps = {
   gridRef: RefObject<HTMLElement | null>;
   onEditFolder: (folder: ResolvedFolder) => void;
   onEditShortcut: (shortcut: Shortcut) => void;
-  onMoveTopLevelTile: (targetTileKey: string) => Promise<void>;
+  onMoveTopLevelTile: (targetTileKey: string) => void;
   onOpenNewFolderDialog: () => void;
   onOpenNewShortcutDialog: () => void;
   onSetActiveFolderId: (folderId: string | null) => void;
@@ -115,7 +115,8 @@ export function ShortcutGrid({
             },
             onDrop: (event: DragEvent<HTMLElement>) => {
               event.preventDefault();
-              void onMoveTopLevelTile(tile.key).finally(finishDragging);
+              onMoveTopLevelTile(tile.key);
+              finishDragging();
             },
             onDragEnd: finishDragging
           };
