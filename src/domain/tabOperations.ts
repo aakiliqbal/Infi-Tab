@@ -1,6 +1,6 @@
 import { brandIcons, matchBrandIcon, type BrandIcon } from "./brandIcons";
 import { compactShortcutPages, type Folder, type Shortcut, type TabState, type TileId } from "./tabState";
-import type { FolderDraft, ShortcutDraft } from "../ui/model/drafts";
+import type { FolderEditDraft, ShortcutDraft } from "../ui/model/drafts";
 
 export type ResolvedFolder = Folder & {
   shortcuts: Shortcut[];
@@ -63,7 +63,7 @@ export function createShortcutFromDraft(draft: ShortcutDraft): Shortcut | null {
   };
 }
 
-export function createFolderFromDraft(state: TabState, draft: FolderDraft): Folder | null {
+export function updateFolderFromDraft(state: TabState, draft: FolderEditDraft): Folder | null {
   const title = draft.title.trim();
 
   if (!title) {
@@ -71,18 +71,22 @@ export function createFolderFromDraft(state: TabState, draft: FolderDraft): Fold
   }
 
   const iconLabel = (draft.iconLabel.trim() || title.slice(0, 1) || "?").slice(0, 2).toUpperCase();
-  const existing = draft.id ? getFolder(state, draft.id) : null;
+  const existing = getFolder(state, draft.id);
+
+  if (!existing) {
+    return null;
+  }
 
   return {
     kind: "folder",
-    id: draft.id ?? crypto.randomUUID(),
+    id: draft.id,
     title,
     icon: {
       type: "fallback",
       label: iconLabel,
       background: draft.iconBackground
     },
-    childIds: existing?.childIds ?? []
+    childIds: existing.childIds
   };
 }
 
@@ -135,14 +139,13 @@ export function deleteShortcutFromState(state: TabState, draft: ShortcutDraft): 
   };
 }
 
-export function upsertFolder(state: TabState, folder: Folder, draft: FolderDraft): TabState {
+export function updateFolder(state: TabState, folder: Folder): TabState {
   return {
     ...state,
     tiles: {
       ...state.tiles,
       [folder.id]: folder
-    },
-    pages: draft.id ? state.pages : appendTileToLastPage(state.pages, folder.id)
+    }
   };
 }
 

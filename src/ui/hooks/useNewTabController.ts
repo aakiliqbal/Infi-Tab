@@ -15,26 +15,21 @@ import {
 } from "../../domain/tabState";
 import {
   applyRecommendedIcon,
-  createFolderFromDraft,
   createShortcutFromDraft,
   deleteFolderFromState,
   deleteShortcutFromState,
   getShortcutPageIndex,
+  updateFolder,
+  updateFolderFromDraft,
   resolveActiveFolder,
   resolveTopLevelTiles,
-  upsertFolder,
   upsertShortcut
 } from "../../domain/tabOperations";
 import { applyDropAction, type DropAction } from "../../domain/dropActions";
 import { readFileAsDataUrl } from "../../infrastructure/fileData";
 import { deleteMediaDataUrl } from "../../infrastructure/mediaStorage";
 import { useTabStore } from "../../stores/useTabStore";
-import {
-  emptyFolderDraft,
-  emptyShortcutDraft,
-  type FolderDraft,
-  type ShortcutDraft
-} from "../model/drafts";
+import { emptyShortcutDraft, type FolderEditDraft, type ShortcutDraft } from "../model/drafts";
 
 export function useNewTabController() {
   const tabState = useTabStore();
@@ -45,7 +40,7 @@ export function useNewTabController() {
   const setWallpaper = useTabStore((state) => state.setWallpaper);
   const [query, setQuery] = useState("");
   const [shortcutDraft, setShortcutDraft] = useState<ShortcutDraft | null>(null);
-  const [folderDraft, setFolderDraft] = useState<FolderDraft | null>(null);
+  const [folderDraft, setFolderDraft] = useState<FolderEditDraft | null>(null);
   const [activeFolderId, setActiveFolderId] = useState<string | null>(null);
   const [isSettingsDrawerOpen, setIsSettingsDrawerOpen] = useState(false);
   const [wallpaperMessage, setWallpaperMessage] = useState<string | null>(null);
@@ -117,10 +112,6 @@ export function useNewTabController() {
     });
   }
 
-  function openNewFolderDialog() {
-    setFolderDraft(emptyFolderDraft);
-  }
-
   function openEditFolderDialog(folder: Folder) {
     setFolderDraft({
       id: folder.id,
@@ -172,16 +163,13 @@ export function useNewTabController() {
       return;
     }
 
-    const nextFolder = createFolderFromDraft(tabState, folderDraft);
+    const nextFolder = updateFolderFromDraft(tabState, folderDraft);
     if (!nextFolder) {
       return;
     }
 
-    const nextState = upsertFolder(tabState, nextFolder, folderDraft);
+    const nextState = updateFolder(tabState, nextFolder);
     persistState(nextState);
-    if (!folderDraft.id) {
-      moveToTilePage(nextState, "folder", nextFolder.id);
-    }
     setFolderDraft(null);
   }
 
@@ -341,7 +329,6 @@ export function useNewTabController() {
     isSettingsDrawerOpen,
     openEditFolderDialog,
     openEditShortcutDialog,
-    openNewFolderDialog,
     openNewShortcutDialog,
     query,
     shortcutDraft,

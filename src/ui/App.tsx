@@ -17,8 +17,7 @@ export function App() {
   const shortcutPageItems = useMemo<ShortcutPageItem[]>(
     () => [
       ...controller.topLevelTiles,
-      { key: "create:shortcut", type: "create-shortcut" },
-      { key: "create:folder", type: "create-folder" }
+      { key: "create:shortcut", type: "create-shortcut" }
     ],
     [controller.topLevelTiles]
   );
@@ -207,7 +206,6 @@ export function App() {
           gridRef={controller.gridRef}
           onEditFolder={controller.openEditFolderDialog}
           onEditShortcut={controller.openEditShortcutDialog}
-          onOpenNewFolderDialog={controller.openNewFolderDialog}
           onOpenNewShortcutDialog={controller.openNewShortcutDialog}
           onSetActiveFolderId={controller.setActiveFolderId}
           onSetActiveShortcutPage={controller.setActiveShortcutPage}

@@ -12,8 +12,8 @@ export type ShortcutDraft = {
   brandIconId: BrandIconId | null;
 };
 
-export type FolderDraft = {
-  id: string | null;
+export type FolderEditDraft = {
+  id: string;
   title: string;
   iconLabel: string;
   iconBackground: string;
@@ -29,11 +29,4 @@ export const emptyShortcutDraft: ShortcutDraft = {
   iconImageDataUrl: null,
   iconMediaId: null,
   brandIconId: null
-};
-
-export const emptyFolderDraft: FolderDraft = {
-  id: null,
-  title: "",
-  iconLabel: "",
-  iconBackground: "#64748b"
 };

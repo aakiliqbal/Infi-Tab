@@ -14,7 +14,7 @@ import {
 } from "@dnd-kit/core";
 import { CSS } from "@dnd-kit/utilities";
 import { motion, useReducedMotion } from "motion/react";
-import { Folder as FolderIcon, FolderPlus as FolderPlusIcon } from "lucide-react";
+import { Folder as FolderIcon } from "lucide-react";
 import { resolveDrop, type DropAction, type DropZone } from "../domain/dropActions";
 import type { ResolvedFolder, ResolvedTopLevelTile } from "../domain/tabOperations";
 import type { Shortcut, TabState } from "../domain/tabState";
@@ -25,10 +25,6 @@ export type ShortcutPageItem =
   | {
       key: "create:shortcut";
       type: "create-shortcut";
-    }
-  | {
-      key: "create:folder";
-      type: "create-folder";
     };
 
 type ShortcutGridProps = {
@@ -37,7 +33,6 @@ type ShortcutGridProps = {
   gridRef: RefObject<HTMLElement | null>;
   onEditFolder: (folder: ResolvedFolder) => void;
   onEditShortcut: (shortcut: Shortcut) => void;
-  onOpenNewFolderDialog: () => void;
   onOpenNewShortcutDialog: () => void;
   onSetActiveFolderId: (folderId: string | null) => void;
   onSetActiveShortcutPage: (pageIndex: number) => void;
@@ -59,7 +54,6 @@ export function ShortcutGrid({
   gridRef,
   onEditFolder,
   onEditShortcut,
-  onOpenNewFolderDialog,
   onOpenNewShortcutDialog,
   onSetActiveFolderId,
   onSetActiveShortcutPage,
@@ -79,6 +73,8 @@ export function ShortcutGrid({
     [visibleShortcutPageItems]
   );
   const activeTile = draggableTiles.find((tile) => tile.key === dndMeta?.activeKey) ?? null;
+  const overTile = draggableTiles.find((tile) => tile.key === dndMeta?.overKey) ?? null;
+  const isCombineHover = activeTile?.type === "shortcut" && overTile?.type === "shortcut" && dndMeta?.overZone === "center";
 
   function handleDragOver(event: DragOverEvent) {
     const activeKey = String(event.active.id);
@@ -134,17 +130,6 @@ export function ShortcutGrid({
             );
           }
 
-          if (tile.type === "create-folder") {
-            return (
-              <button className="quick-link add-link" type="button" key={tile.key} onClick={onOpenNewFolderDialog}>
-                <span className="quick-link-icon add-link-icon folder-add-icon" aria-hidden="true">
-                  <FolderPlusIcon strokeWidth={2.25} />
-                </span>
-                <span className="quick-link-title">Folder</span>
-              </button>
-            );
-          }
-
           return (
             <DraggableTile
               dndMeta={dndMeta}
@@ -168,6 +153,11 @@ export function ShortcutGrid({
             transition={reducedMotion ? { duration: 0 } : { type: "spring", stiffness: 400, damping: 30 }}
           >
             <TileContent tile={activeTile} showLabels={showLabels} />
+            {isCombineHover ? (
+              <span className="drag-overlay-merge" aria-hidden="true">
+                +
+              </span>
+            ) : null}
           </motion.div>
         ) : null}
       </DragOverlay>

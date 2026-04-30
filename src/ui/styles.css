@@ -601,6 +601,10 @@ input {
   .quick-link-grid {
     animation: none;
   }
+
+  .quick-link.drop-center .quick-link-icon {
+    animation: none;
+  }
 }
 
 .quick-link {
@@ -644,6 +648,21 @@ input {
     0 18px 34px rgba(0, 0, 0, 0.24);
 }
 
+.quick-link.drop-center .quick-link-icon {
+  animation: combine-pulse 700ms ease-in-out infinite;
+}
+
+@keyframes combine-pulse {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+
+  50% {
+    transform: scale(1.08);
+  }
+}
+
 .drag-overlay-tile {
   display: grid;
   justify-items: center;
@@ -653,6 +672,23 @@ input {
   text-decoration: none;
   filter: drop-shadow(0 8px 24px rgba(0, 0, 0, 0.15));
   pointer-events: none;
+  position: relative;
+}
+
+.drag-overlay-merge {
+  position: absolute;
+  top: -8px;
+  right: -8px;
+  display: grid;
+  width: 30px;
+  height: 30px;
+  place-items: center;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.94);
+  color: #1f2937;
+  font-size: 22px;
+  font-weight: 900;
+  line-height: 1;
 }
 
 .quick-link-icon {
