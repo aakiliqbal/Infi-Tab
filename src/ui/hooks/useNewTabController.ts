@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
+import { produce } from "immer";
 import { findBrandIconRecommendations, type BrandIcon } from "../../domain/brandIcons";
 import {
   describeBackupReplacement,
@@ -19,12 +20,12 @@ import {
   deleteFolderFromState,
   deleteShortcutFromState,
   getShortcutPageIndex,
-  moveTopLevelTileInState,
   resolveActiveFolder,
   resolveTopLevelTiles,
   upsertFolder,
   upsertShortcut
 } from "../../domain/tabOperations";
+import { applyDropAction, type DropAction } from "../../domain/dropActions";
 import { readFileAsDataUrl } from "../../infrastructure/fileData";
 import { deleteMediaDataUrl } from "../../infrastructure/mediaStorage";
 import { useTabStore } from "../../stores/useTabStore";
@@ -49,8 +50,6 @@ export function useNewTabController() {
   const [isSettingsDrawerOpen, setIsSettingsDrawerOpen] = useState(false);
   const [wallpaperMessage, setWallpaperMessage] = useState<string | null>(null);
   const [backupMessage, setBackupMessage] = useState<string | null>(null);
-  const [draggedTopLevelTileKey, setDraggedTopLevelTileKey] = useState<string | null>(null);
-  const [dragOverTopLevelTileKey, setDragOverTopLevelTileKey] = useState<string | null>(null);
   const [activeShortcutPage, setActiveShortcutPage] = useState(0);
   const gridRef = useRef<HTMLElement | null>(null);
 
@@ -200,17 +199,12 @@ export function useNewTabController() {
     setFolderDraft(null);
   }
 
-  function moveTopLevelTile(targetTileKey: string) {
-    if (!draggedTopLevelTileKey || draggedTopLevelTileKey === targetTileKey) {
-      return;
-    }
-
-    updateTabState((state) => moveTopLevelTileInState(state, draggedTopLevelTileKey, targetTileKey));
-  }
-
-  function finishDragging() {
-    setDraggedTopLevelTileKey(null);
-    setDragOverTopLevelTileKey(null);
+  function dispatchDropAction(action: DropAction) {
+    updateTabState((state) =>
+      produce(state, (draft) => {
+        applyDropAction(draft, action);
+      })
+    );
   }
 
   async function uploadWallpaper(file: File | null) {
@@ -338,10 +332,8 @@ export function useNewTabController() {
     chooseRecommendedIcon,
     deleteFolder,
     deleteShortcut,
-    dragOverTopLevelTileKey,
-    draggedTopLevelTileKey,
+    dispatchDropAction,
     exportBackup,
-    finishDragging,
     folderDraft,
     gridRef,
     hasOverlayOpen,
@@ -360,8 +352,6 @@ export function useNewTabController() {
     setActiveFolderId,
     setActiveShortcutPage,
     setBackupMessage,
-    setDragOverTopLevelTileKey,
-    setDraggedTopLevelTileKey,
     setFolderDraft,
     setIsSettingsDrawerOpen,
     setQuery,
@@ -370,7 +360,6 @@ export function useNewTabController() {
     topLevelTiles,
     uploadShortcutIcon,
     uploadWallpaper,
-    wallpaperMessage,
-    moveTopLevelTile
+    wallpaperMessage
   };
 }

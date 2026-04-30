@@ -203,21 +203,17 @@ export function App() {
 
         <ShortcutGrid
           activeShortcutPageIndex={activeShortcutPageIndex}
-          dragOverTopLevelTileKey={controller.dragOverTopLevelTileKey}
-          draggedTopLevelTileKey={controller.draggedTopLevelTileKey}
-          finishDragging={controller.finishDragging}
+          dispatchDropAction={controller.dispatchDropAction}
           gridRef={controller.gridRef}
           onEditFolder={controller.openEditFolderDialog}
           onEditShortcut={controller.openEditShortcutDialog}
-          onMoveTopLevelTile={controller.moveTopLevelTile}
           onOpenNewFolderDialog={controller.openNewFolderDialog}
           onOpenNewShortcutDialog={controller.openNewShortcutDialog}
           onSetActiveFolderId={controller.setActiveFolderId}
           onSetActiveShortcutPage={controller.setActiveShortcutPage}
-          onSetDragOverTopLevelTileKey={controller.setDragOverTopLevelTileKey}
-          onSetDraggedTopLevelTileKey={controller.setDraggedTopLevelTileKey}
           pageCount={shortcutPageCount}
           showLabels={tabState.layout.showLabels}
+          tabState={tabState}
           visibleShortcutPageItems={visibleShortcutPageItems}
         />
       </section>

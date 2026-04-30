@@ -621,10 +621,6 @@ input {
     transform 140ms ease;
 }
 
-.quick-link[draggable="true"] {
-  cursor: grab;
-}
-
 .quick-link.dragging {
   cursor: grabbing;
   opacity: 0.46;
@@ -634,6 +630,29 @@ input {
 .quick-link.drag-over .quick-link-icon {
   outline: 3px solid rgba(255, 255, 255, 0.88);
   outline-offset: 7px;
+}
+
+.quick-link.drop-leading .quick-link-icon {
+  box-shadow:
+    -10px 0 0 rgba(255, 255, 255, 0.74),
+    0 18px 34px rgba(0, 0, 0, 0.24);
+}
+
+.quick-link.drop-trailing .quick-link-icon {
+  box-shadow:
+    10px 0 0 rgba(255, 255, 255, 0.74),
+    0 18px 34px rgba(0, 0, 0, 0.24);
+}
+
+.drag-overlay-tile {
+  display: grid;
+  justify-items: center;
+  gap: var(--quick-link-tile-gap);
+  color: #ffffff;
+  text-align: center;
+  text-decoration: none;
+  filter: drop-shadow(0 8px 24px rgba(0, 0, 0, 0.15));
+  pointer-events: none;
 }
 
 .quick-link-icon {
