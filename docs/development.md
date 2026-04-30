@@ -48,7 +48,7 @@ src/ui/model/drafts.ts        Editor draft types and defaults
 src/ui/hooks/useShortcutGridMetrics.ts  Grid fitting calculations
 src/ui/styles.css             Application styling
 tests/smoke.spec.ts           Browser smoke test
-src/domain/backup.test.ts     Backup parsing and migration tests
+src/domain/backup.test.ts     Backup parsing tests
 vitest.config.ts              Unit test runner config
 playwright.config.ts          Browser smoke test config
 src/domain/tabState.ts        App state types and default state
@@ -83,7 +83,7 @@ Top-level fields:
 - `brand`: bundled Simple Icons ID.
 - `image`: uploaded image data URL plus stable media ID.
 
-Folders store child shortcuts by ID through `childIds[]`; child shortcut records still live in the flat `tiles` map. Legacy schema v1 state and backups are migrated on load/import from `quickLinks`, nested folder `quickLinks`, and `topLevelTiles` into the v2 flat map and page structure.
+Folders store child shortcuts by ID through `childIds[]`; child shortcut records still live in the flat `tiles` map. Legacy schema v1 runtime state is migrated on load from `quickLinks`, nested folder `quickLinks`, and `topLevelTiles` into the v2 flat map and page structure.
 
 ## Storage
 
@@ -110,7 +110,7 @@ Import is replace-only:
 3. User confirms replacement.
 4. Current state is replaced.
 
-Older v1 backups are migrated to schema v2. Backups missing newer wallpaper fields get defaults for `dim` and `blur`. On load, media IDs are hydrated back into data URLs from IndexedDB.
+Backup import accepts schema v2 files only. Schema v1 backups are rejected with a user-facing message telling the user to export a fresh backup after opening the latest version. Backups missing newer wallpaper fields get defaults for `dim` and `blur`.
 
 Backup parsing lives in `src/domain/backup.ts` so import compatibility has a dedicated seam.
 

@@ -1,8 +1,12 @@
-import { migrateLegacyTabState, normalizeTabState, searchProviders, type LegacyTabState, type TabState } from "./tabState";
+import { normalizeTabState, searchProviders, type TabState } from "./tabState";
 
 export function parseTabStateBackup(value: unknown): TabState {
   if (!isRecord(value) || (value.schemaVersion !== 1 && value.schemaVersion !== 2)) {
     throw new Error("Unsupported backup schema");
+  }
+
+  if (value.schemaVersion === 1) {
+    throw new Error("Legacy backup schema");
   }
 
   if (
@@ -12,14 +16,6 @@ export function parseTabStateBackup(value: unknown): TabState {
     !(value.searchProvider in searchProviders)
   ) {
     throw new Error("Invalid backup shape");
-  }
-
-  if (value.schemaVersion === 1) {
-    if (!Array.isArray(value.quickLinks) || !Array.isArray(value.folders)) {
-      throw new Error("Invalid backup shape");
-    }
-
-    return migrateLegacyTabState(value as Partial<LegacyTabState>);
   }
 
   if (!isRecord(value.tiles) || !Array.isArray(value.pages)) {
@@ -46,6 +42,10 @@ export function getBackupImportErrorMessage(error: unknown): string {
   if (error instanceof Error) {
     if (error.message === "Unsupported backup schema") {
       return "This backup uses an unsupported schema version.";
+    }
+
+    if (error.message === "Legacy backup schema") {
+      return "This backup uses the old v1 format. Export a new backup after opening the latest version of Infi Tab.";
     }
 
     if (error.message === "Invalid backup shape") {

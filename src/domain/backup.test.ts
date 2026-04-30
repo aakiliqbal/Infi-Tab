@@ -24,7 +24,7 @@ describe("parseTabStateBackup", () => {
     expect(parsed.pages[0].tileIds).toContain("docs");
   });
 
-  it("migrates v1 backups to the flat v2 tile map", () => {
+  it("rejects v1 backups with a legacy schema error", () => {
     const backup = {
       schemaVersion: 1,
       searchProvider: defaultTabState.searchProvider,
@@ -68,15 +68,7 @@ describe("parseTabStateBackup", () => {
       ]
     };
 
-    const parsed = parseTabStateBackup(backup);
-
-    expect(parsed.schemaVersion).toBe(2);
-    expect(parsed.pages[0].tileIds).toEqual(["docs", "work-folder"]);
-    expect(parsed.tiles.docs.kind).toBe("shortcut");
-    expect(parsed.tiles["work-folder"].kind).toBe("folder");
-    expect(parsed.tiles["work-folder"].kind === "folder" ? parsed.tiles["work-folder"].childIds : []).toEqual([
-      "work-notion"
-    ]);
+    expect(() => parseTabStateBackup(backup)).toThrow("Legacy backup schema");
   });
 
   it("keeps media payload references in portable backup state", () => {
@@ -129,6 +121,9 @@ describe("parseTabStateBackup", () => {
     );
     expect(getBackupImportErrorMessage(new Error("Unsupported backup schema"))).toBe(
       "This backup uses an unsupported schema version."
+    );
+    expect(getBackupImportErrorMessage(new Error("Legacy backup schema"))).toBe(
+      "This backup uses the old v1 format. Export a new backup after opening the latest version of Infi Tab."
     );
     expect(getBackupImportErrorMessage(new Error("Invalid backup shape"))).toBe(
       "This backup file is missing required fields."

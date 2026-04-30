@@ -27,7 +27,7 @@ import {
 } from "../../domain/tabOperations";
 import { readFileAsDataUrl } from "../../infrastructure/fileData";
 import { deleteMediaDataUrl } from "../../infrastructure/mediaStorage";
-import { loadTabState, saveTabState } from "../../infrastructure/tabStorage";
+import { useTabStore } from "../../stores/useTabStore";
 import {
   emptyFolderDraft,
   emptyShortcutDraft,
@@ -36,7 +36,12 @@ import {
 } from "../model/drafts";
 
 export function useNewTabController() {
-  const [tabState, setTabState] = useState<TabState | null>(null);
+  const tabState = useTabStore();
+  const replaceTabState = useTabStore((state) => state.replaceState);
+  const updateTabState = useTabStore((state) => state.updateState);
+  const setLayout = useTabStore((state) => state.setLayout);
+  const setSearchProvider = useTabStore((state) => state.setSearchProvider);
+  const setWallpaper = useTabStore((state) => state.setWallpaper);
   const [query, setQuery] = useState("");
   const [shortcutDraft, setShortcutDraft] = useState<ShortcutDraft | null>(null);
   const [folderDraft, setFolderDraft] = useState<FolderDraft | null>(null);
@@ -48,10 +53,6 @@ export function useNewTabController() {
   const [dragOverTopLevelTileKey, setDragOverTopLevelTileKey] = useState<string | null>(null);
   const [activeShortcutPage, setActiveShortcutPage] = useState(0);
   const gridRef = useRef<HTMLElement | null>(null);
-
-  useEffect(() => {
-    void loadTabState().then(setTabState);
-  }, []);
 
   useEffect(() => {
     function closeOverlays(event: KeyboardEvent) {
@@ -70,23 +71,18 @@ export function useNewTabController() {
   }, []);
 
   const activeSearchProvider = useMemo(() => {
-    if (!tabState) {
-      return searchProviders.google;
-    }
-
     return searchProviders[tabState.searchProvider];
   }, [tabState]);
 
-  const topLevelTiles = useMemo(() => (tabState ? resolveTopLevelTiles(tabState) : []), [tabState]);
+  const topLevelTiles = useMemo(() => resolveTopLevelTiles(tabState), [tabState]);
   const hasOverlayOpen = isSettingsDrawerOpen || shortcutDraft !== null || folderDraft !== null || activeFolderId !== null;
-  const activeFolder = tabState ? resolveActiveFolder(tabState, activeFolderId) : null;
+  const activeFolder = resolveActiveFolder(tabState, activeFolderId);
   const shortcutIconRecommendations = shortcutDraft
     ? findBrandIconRecommendations(shortcutDraft.title, shortcutDraft.url)
     : [];
 
-  async function persistState(nextState: TabState) {
-    const persistedState = await saveTabState(nextState);
-    setTabState(persistedState);
+  function persistState(nextState: TabState) {
+    replaceTabState(nextState);
   }
 
   function moveToTilePage(nextState: TabState, type: "shortcut" | "folder", id: string) {
@@ -96,26 +92,12 @@ export function useNewTabController() {
     }
   }
 
-  async function changeSearchProvider(providerId: SearchProviderId) {
-    if (!tabState) {
-      return;
-    }
-
-    await persistState({ ...tabState, searchProvider: providerId });
+  function changeSearchProvider(providerId: SearchProviderId) {
+    setSearchProvider(providerId);
   }
 
-  async function changeLayout<K extends keyof TabState["layout"]>(key: K, value: TabState["layout"][K]) {
-    if (!tabState) {
-      return;
-    }
-
-    await persistState({
-      ...tabState,
-      layout: {
-        ...tabState.layout,
-        [key]: value
-      }
-    });
+  function changeLayout<K extends keyof TabState["layout"]>(key: K, value: TabState["layout"][K]) {
+    setLayout(key, value);
   }
 
   function openNewShortcutDialog() {
@@ -152,7 +134,7 @@ export function useNewTabController() {
   async function saveShortcut(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
-    if (!shortcutDraft || !tabState) {
+    if (!shortcutDraft) {
       return;
     }
 
@@ -162,7 +144,7 @@ export function useNewTabController() {
     }
 
     const nextState = upsertShortcut(tabState, nextShortcut, shortcutDraft);
-    await persistState(nextState);
+    persistState(nextState);
     if (shortcutDraft.iconMediaId && nextShortcut.icon.type !== "image") {
       await deleteMediaDataUrl(shortcutDraft.iconMediaId);
     }
@@ -173,11 +155,11 @@ export function useNewTabController() {
   }
 
   async function deleteShortcut() {
-    if (!shortcutDraft?.id || !tabState) {
+    if (!shortcutDraft?.id) {
       return;
     }
 
-    await persistState(deleteShortcutFromState(tabState, shortcutDraft));
+    persistState(deleteShortcutFromState(tabState, shortcutDraft));
     if (shortcutDraft.iconMediaId) {
       await deleteMediaDataUrl(shortcutDraft.iconMediaId);
     }
@@ -187,7 +169,7 @@ export function useNewTabController() {
   async function saveFolder(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
-    if (!folderDraft || !tabState) {
+    if (!folderDraft) {
       return;
     }
 
@@ -197,7 +179,7 @@ export function useNewTabController() {
     }
 
     const nextState = upsertFolder(tabState, nextFolder, folderDraft);
-    await persistState(nextState);
+    persistState(nextState);
     if (!folderDraft.id) {
       moveToTilePage(nextState, "folder", nextFolder.id);
     }
@@ -205,11 +187,11 @@ export function useNewTabController() {
   }
 
   async function deleteFolder() {
-    if (!folderDraft?.id || !tabState) {
+    if (!folderDraft?.id) {
       return;
     }
 
-    await persistState(deleteFolderFromState(tabState, folderDraft.id));
+    persistState(deleteFolderFromState(tabState, folderDraft.id));
 
     if (activeFolderId === folderDraft.id) {
       setActiveFolderId(null);
@@ -219,13 +201,11 @@ export function useNewTabController() {
   }
 
   function moveTopLevelTile(targetTileKey: string) {
-    if (!tabState || !draggedTopLevelTileKey || draggedTopLevelTileKey === targetTileKey) {
+    if (!draggedTopLevelTileKey || draggedTopLevelTileKey === targetTileKey) {
       return;
     }
 
-    const nextState = moveTopLevelTileInState(tabState, draggedTopLevelTileKey, targetTileKey);
-    setTabState(nextState);
-    void saveTabState(nextState).then(setTabState);
+    updateTabState((state) => moveTopLevelTileInState(state, draggedTopLevelTileKey, targetTileKey));
   }
 
   function finishDragging() {
@@ -234,7 +214,7 @@ export function useNewTabController() {
   }
 
   async function uploadWallpaper(file: File | null) {
-    if (!file || !tabState) {
+    if (!file) {
       return;
     }
 
@@ -246,13 +226,10 @@ export function useNewTabController() {
     try {
       setWallpaperMessage("Saving wallpaper...");
       const wallpaperDataUrl = await readFileAsDataUrl(file);
-      await persistState({
-        ...tabState,
-        wallpaper: {
-          ...tabState.wallpaper,
-          type: "dataUrl",
-          value: wallpaperDataUrl
-        }
+      setWallpaper({
+        ...tabState.wallpaper,
+        type: "dataUrl",
+        value: wallpaperDataUrl
       });
       setWallpaperMessage("Wallpaper saved.");
     } catch {
@@ -286,20 +263,13 @@ export function useNewTabController() {
   }
 
   async function resetWallpaper() {
-    if (!tabState) {
-      return;
-    }
-
     try {
-      await persistState({
-        ...tabState,
-        wallpaper: {
-          type: "none",
-          value: null,
-          mediaId: null,
-          dim: tabState.wallpaper.dim,
-          blur: tabState.wallpaper.blur
-        }
+      setWallpaper({
+        type: "none",
+        value: null,
+        mediaId: null,
+        dim: tabState.wallpaper.dim,
+        blur: tabState.wallpaper.blur
       });
       if (tabState.wallpaper.mediaId) {
         await deleteMediaDataUrl(tabState.wallpaper.mediaId);
@@ -311,24 +281,13 @@ export function useNewTabController() {
   }
 
   async function changeWallpaperSetting(key: "dim" | "blur", value: number) {
-    if (!tabState) {
-      return;
-    }
-
-    await persistState({
-      ...tabState,
-      wallpaper: {
-        ...tabState.wallpaper,
-        [key]: value
-      }
+    setWallpaper({
+      ...tabState.wallpaper,
+      [key]: value
     });
   }
 
   function exportBackup() {
-    if (!tabState) {
-      return;
-    }
-
     const backupBlob = new Blob([JSON.stringify(tabState, null, 2)], {
       type: "application/json"
     });
@@ -357,7 +316,7 @@ export function useNewTabController() {
         return;
       }
 
-      await persistState(nextState);
+      persistState(nextState);
       setActiveFolderId(null);
       setShortcutDraft(null);
       setFolderDraft(null);
