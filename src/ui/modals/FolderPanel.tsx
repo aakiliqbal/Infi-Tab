@@ -1,20 +1,21 @@
-import { type Folder, type QuickLink } from "../../domain/tabState";
-import { QuickLinkIcon } from "../QuickLinkIcon";
+import { type ResolvedFolder } from "../../domain/tabOperations";
+import { type Shortcut } from "../../domain/tabState";
+import { ShortcutIcon } from "../ShortcutIcon";
 
 type FolderPanelProps = {
-  activeFolder: Folder;
+  activeFolder: ResolvedFolder;
   onClose: () => void;
-  onEditFolder: (folder: Folder) => void;
-  onEditQuickLink: (quickLink: QuickLink) => void;
-  onOpenNewQuickLinkDialog: () => void;
+  onEditFolder: (folder: ResolvedFolder) => void;
+  onEditShortcut: (shortcut: Shortcut) => void;
+  onOpenNewShortcutDialog: () => void;
 };
 
 export function FolderPanel({
   activeFolder,
   onClose,
   onEditFolder,
-  onEditQuickLink,
-  onOpenNewQuickLinkDialog
+  onEditShortcut,
+  onOpenNewShortcutDialog
 }: FolderPanelProps) {
   return (
     <div
@@ -30,7 +31,7 @@ export function FolderPanel({
         <div className="folder-header">
           <div>
             <h1 id="folder-panel-title">{activeFolder.title}</h1>
-            <span>{activeFolder.quickLinks.length} shortcuts</span>
+            <span>{activeFolder.shortcuts.length} shortcuts</span>
           </div>
           <div className="folder-actions">
             <button className="secondary-button" type="button" onClick={() => onEditFolder(activeFolder)}>
@@ -43,17 +44,17 @@ export function FolderPanel({
         </div>
 
         <div className="folder-grid">
-          {activeFolder.quickLinks.map((quickLink) => (
-            <a className="quick-link folder-item" href={quickLink.url} key={quickLink.id}>
-              <QuickLinkIcon quickLink={quickLink} />
-              <span className="quick-link-title">{quickLink.title}</span>
+          {activeFolder.shortcuts.map((shortcut) => (
+            <a className="quick-link folder-item" href={shortcut.url} key={shortcut.id}>
+              <ShortcutIcon shortcut={shortcut} />
+              <span className="quick-link-title">{shortcut.title}</span>
               <button
                 className="quick-link-edit"
                 type="button"
-                aria-label={`Edit ${quickLink.title}`}
+                aria-label={`Edit ${shortcut.title}`}
                 onClick={(event) => {
                   event.preventDefault();
-                  onEditQuickLink(quickLink);
+                  onEditShortcut(shortcut);
                 }}
               >
                 Edit
@@ -61,7 +62,7 @@ export function FolderPanel({
             </a>
           ))}
 
-          <button className="quick-link add-link" type="button" onClick={onOpenNewQuickLinkDialog}>
+          <button className="quick-link add-link" type="button" onClick={onOpenNewShortcutDialog}>
             <span className="quick-link-icon add-link-icon" aria-hidden="true">
               +
             </span>

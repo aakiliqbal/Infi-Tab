@@ -1,6 +1,6 @@
 import type { BrandIconId } from "../../domain/brandIcons";
 
-export type QuickLinkDraft = {
+export type ShortcutDraft = {
   id: string | null;
   folderId: string | null;
   title: string;
@@ -19,7 +19,7 @@ export type FolderDraft = {
   iconBackground: string;
 };
 
-export const emptyQuickLinkDraft: QuickLinkDraft = {
+export const emptyShortcutDraft: ShortcutDraft = {
   id: null,
   folderId: null,
   title: "",

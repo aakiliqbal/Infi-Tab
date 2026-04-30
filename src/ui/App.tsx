@@ -4,7 +4,7 @@ import { SettingsDrawer } from "./SettingsDrawer";
 import { ShortcutGrid, type ShortcutPageItem } from "./ShortcutGrid";
 import { FolderModal } from "./modals/FolderModal";
 import { FolderPanel } from "./modals/FolderPanel";
-import { QuickLinkModal } from "./modals/QuickLinkModal";
+import { ShortcutModal } from "./modals/ShortcutModal";
 import { useNewTabController } from "./hooks/useNewTabController";
 import { useShortcutGridMetrics } from "./hooks/useShortcutGridMetrics";
 
@@ -208,10 +208,10 @@ export function App() {
           finishDragging={controller.finishDragging}
           gridRef={controller.gridRef}
           onEditFolder={controller.openEditFolderDialog}
-          onEditQuickLink={controller.openEditQuickLinkDialog}
+          onEditShortcut={controller.openEditShortcutDialog}
           onMoveTopLevelTile={controller.moveTopLevelTile}
           onOpenNewFolderDialog={controller.openNewFolderDialog}
-          onOpenNewQuickLinkDialog={controller.openNewQuickLinkDialog}
+          onOpenNewShortcutDialog={controller.openNewShortcutDialog}
           onSetActiveFolderId={controller.setActiveFolderId}
           onSetActiveShortcutPage={controller.setActiveShortcutPage}
           onSetDragOverTopLevelTileKey={controller.setDragOverTopLevelTileKey}
@@ -243,21 +243,21 @@ export function App() {
           activeFolder={controller.activeFolder}
           onClose={() => controller.setActiveFolderId(null)}
           onEditFolder={controller.openEditFolderDialog}
-          onEditQuickLink={(quickLink) => controller.openEditQuickLinkDialog(quickLink, controller.activeFolder?.id ?? null)}
-          onOpenNewQuickLinkDialog={controller.openNewQuickLinkDialog}
+          onEditShortcut={(shortcut) => controller.openEditShortcutDialog(shortcut, controller.activeFolder?.id ?? null)}
+          onOpenNewShortcutDialog={controller.openNewShortcutDialog}
         />
       ) : null}
 
-      {controller.quickLinkDraft ? (
-        <QuickLinkModal
-          draft={controller.quickLinkDraft}
-          iconRecommendations={controller.quickLinkIconRecommendations}
+      {controller.shortcutDraft ? (
+        <ShortcutModal
+          draft={controller.shortcutDraft}
+          iconRecommendations={controller.shortcutIconRecommendations}
           onApplyRecommendedIcon={controller.chooseRecommendedIcon}
-          onChangeDraft={controller.setQuickLinkDraft}
-          onClose={() => controller.setQuickLinkDraft(null)}
-          onDelete={() => void controller.deleteQuickLink()}
-          onSave={controller.saveQuickLink}
-          onUploadIcon={(file) => void controller.uploadQuickLinkIcon(file)}
+          onChangeDraft={controller.setShortcutDraft}
+          onClose={() => controller.setShortcutDraft(null)}
+          onDelete={() => void controller.deleteShortcut()}
+          onSave={controller.saveShortcut}
+          onUploadIcon={(file) => void controller.uploadShortcutIcon(file)}
         />
       ) : null}
 

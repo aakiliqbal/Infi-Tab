@@ -10,7 +10,7 @@ This file records the first architecture deepening pass.
 
 **Problem:** Shortcut, Folder, drag/reorder, and icon-matching behavior lived inside `App.tsx`. That made the New Tab Surface module shallow: callers had to understand UI state, domain mutations, and persistence ordering at once.
 
-**Solution:** Move domain mutations into `tabOperations.ts`. The interface now exposes operations such as `createQuickLinkFromDraft`, `upsertQuickLink`, `deleteQuickLinkFromState`, `createFolderFromDraft`, and `moveQuickLinkInState`.
+**Solution:** Move domain mutations into `tabOperations.ts`. The interface now exposes operations such as `createShortcutFromDraft`, `upsertShortcut`, `deleteShortcutFromState`, `createFolderFromDraft`, and `moveTopLevelTileInState`.
 
 **Benefits:** Locality improves because Shortcut and Folder mutation rules live in one module. Leverage improves because future tests can exercise domain behavior without rendering the New Tab Surface.
 
@@ -44,9 +44,9 @@ This file records the first architecture deepening pass.
 
 **Benefits:** Local state stays lean, the storage boundary is clearer, and backup import/export can keep media portable without pushing large blobs through the main settings store.
 
-### Quick Link Icon View
+### Shortcut Icon View
 
-**Files:** `src/ui/QuickLinkIcon.tsx`, `src/ui/App.tsx`
+**Files:** `src/ui/ShortcutIcon.tsx`, `src/ui/App.tsx`
 
 **Problem:** Brand, image, and fallback icon rendering was duplicated across top-level shortcuts and folder shortcuts.
 
@@ -83,6 +83,16 @@ This file records the first architecture deepening pass.
 **Solution:** Move the state machine and side-effectful actions into `useNewTabController`. The New Tab Surface now composes a controller hook, a shortcut grid, and separate modal/section modules.
 
 **Benefits:** State mutations and persistence now have a tighter seam. The controller hook is a better test surface than the full page, and the view layer can evolve without re-reading storage and backup code.
+
+### Flat Tile Store Foundation
+
+**Files:** `src/domain/tabState.ts`, `src/stores/useTabStore.ts`, `src/infrastructure/tabStorage.ts`
+
+**Problem:** Shortcut and Folder records were split across top-level arrays, while folders nested child shortcut records. That made drag/drop operations expensive to reason about because a move between the surface and a folder required copying records between structures.
+
+**Solution:** Move persisted state to schema v2: a flat `tiles` map stores all `Shortcut` and `Folder` records, and `pages[].tileIds` stores display order. Add a Zustand + immer store shell with `chrome.storage.local` persistence and a v1-to-v2 migration path.
+
+**Benefits:** Future drag actions can mutate ID arrays instead of copying shortcut records. Migration is isolated in the state module, and the store gives later slices a single persisted state boundary.
 
 ### Feature Modals and Settings Sections
 

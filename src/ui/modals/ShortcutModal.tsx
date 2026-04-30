@@ -1,19 +1,19 @@
 import type { FormEvent } from "react";
 import { type BrandIcon } from "../../domain/brandIcons";
-import { type QuickLinkDraft } from "../model/drafts";
+import { type ShortcutDraft } from "../model/drafts";
 
-type QuickLinkModalProps = {
-  draft: QuickLinkDraft;
+type ShortcutModalProps = {
+  draft: ShortcutDraft;
   iconRecommendations: BrandIcon[];
   onApplyRecommendedIcon: (icon: BrandIcon) => void;
-  onChangeDraft: (draft: QuickLinkDraft) => void;
+  onChangeDraft: (draft: ShortcutDraft) => void;
   onClose: () => void;
   onDelete: () => void;
   onSave: (event: FormEvent<HTMLFormElement>) => void;
   onUploadIcon: (file: File | null) => void;
 };
 
-export function QuickLinkModal({
+export function ShortcutModal({
   draft,
   iconRecommendations,
   onApplyRecommendedIcon,
@@ -22,7 +22,7 @@ export function QuickLinkModal({
   onDelete,
   onSave,
   onUploadIcon
-}: QuickLinkModalProps) {
+}: ShortcutModalProps) {
   return (
     <div
       className="modal-backdrop"

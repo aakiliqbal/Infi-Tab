@@ -1,39 +1,37 @@
-import { normalizeGridLayout, normalizeTopLevelTiles, searchProviders, type TabState } from "./tabState";
+import { migrateLegacyTabState, normalizeTabState, searchProviders, type LegacyTabState, type TabState } from "./tabState";
 
 export function parseTabStateBackup(value: unknown): TabState {
-  if (!isRecord(value) || value.schemaVersion !== 1) {
+  if (!isRecord(value) || (value.schemaVersion !== 1 && value.schemaVersion !== 2)) {
     throw new Error("Unsupported backup schema");
   }
 
-  const backup = value as TabState;
   if (
-    !Array.isArray(backup.quickLinks) ||
-    !Array.isArray(backup.folders) ||
-    !isRecord(backup.layout) ||
-    !isRecord(backup.wallpaper) ||
-    !(backup.searchProvider in searchProviders)
+    !isRecord(value.layout) ||
+    !isRecord(value.wallpaper) ||
+    typeof value.searchProvider !== "string" ||
+    !(value.searchProvider in searchProviders)
   ) {
     throw new Error("Invalid backup shape");
   }
 
-  return {
-    ...backup,
-    layout: {
-      ...backup.layout,
-      gridLayout: normalizeGridLayout(backup.layout.gridLayout, backup.layout)
-    },
-    topLevelTiles: normalizeTopLevelTiles(backup.topLevelTiles, backup.quickLinks, backup.folders),
-    wallpaper: {
-      ...backup.wallpaper,
-      dim: typeof backup.wallpaper.dim === "number" ? backup.wallpaper.dim : 40,
-      blur: typeof backup.wallpaper.blur === "number" ? backup.wallpaper.blur : 0
+  if (value.schemaVersion === 1) {
+    if (!Array.isArray(value.quickLinks) || !Array.isArray(value.folders)) {
+      throw new Error("Invalid backup shape");
     }
-  };
+
+    return migrateLegacyTabState(value as Partial<LegacyTabState>);
+  }
+
+  if (!isRecord(value.tiles) || !Array.isArray(value.pages)) {
+    throw new Error("Invalid backup shape");
+  }
+
+  return normalizeTabState(value as Partial<TabState>);
 }
 
 export function describeBackupReplacement(state: TabState): string {
-  const shortcutCount = state.quickLinks.length;
-  const folderCount = state.folders.length;
+  const shortcutCount = Object.values(state.tiles).filter((tile) => tile.kind === "shortcut").length;
+  const folderCount = Object.values(state.tiles).filter((tile) => tile.kind === "folder").length;
 
   return `This will replace ${shortcutCount} shortcut${shortcutCount === 1 ? "" : "s"}, ${folderCount} folder${
     folderCount === 1 ? "" : "s"

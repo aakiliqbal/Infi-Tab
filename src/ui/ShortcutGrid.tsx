@@ -1,8 +1,8 @@
 import { type DragEvent, type RefObject } from "react";
 import { Folder as FolderIcon, FolderPlus as FolderPlusIcon } from "lucide-react";
-import type { ResolvedTopLevelTile } from "../domain/tabOperations";
-import type { Folder, QuickLink } from "../domain/tabState";
-import { QuickLinkIcon } from "./QuickLinkIcon";
+import type { ResolvedFolder, ResolvedTopLevelTile } from "../domain/tabOperations";
+import type { Shortcut } from "../domain/tabState";
+import { ShortcutIcon } from "./ShortcutIcon";
 
 export type ShortcutPageItem =
   | ResolvedTopLevelTile
@@ -21,11 +21,11 @@ type ShortcutGridProps = {
   draggedTopLevelTileKey: string | null;
   finishDragging: () => void;
   gridRef: RefObject<HTMLElement | null>;
-  onEditFolder: (folder: Folder) => void;
-  onEditQuickLink: (quickLink: QuickLink) => void;
+  onEditFolder: (folder: ResolvedFolder) => void;
+  onEditShortcut: (shortcut: Shortcut) => void;
   onMoveTopLevelTile: (targetTileKey: string) => Promise<void>;
   onOpenNewFolderDialog: () => void;
-  onOpenNewQuickLinkDialog: () => void;
+  onOpenNewShortcutDialog: () => void;
   onSetActiveFolderId: (folderId: string | null) => void;
   onSetActiveShortcutPage: (pageIndex: number) => void;
   onSetDragOverTopLevelTileKey: (key: string | null) => void;
@@ -42,10 +42,10 @@ export function ShortcutGrid({
   finishDragging,
   gridRef,
   onEditFolder,
-  onEditQuickLink,
+  onEditShortcut,
   onMoveTopLevelTile,
   onOpenNewFolderDialog,
-  onOpenNewQuickLinkDialog,
+  onOpenNewShortcutDialog,
   onSetActiveFolderId,
   onSetActiveShortcutPage,
   onSetDragOverTopLevelTileKey,
@@ -65,7 +65,7 @@ export function ShortcutGrid({
         {visibleShortcutPageItems.map((tile) => {
           if (tile.type === "create-shortcut") {
             return (
-              <button className="quick-link add-link" type="button" key={tile.key} onClick={onOpenNewQuickLinkDialog}>
+              <button className="quick-link add-link" type="button" key={tile.key} onClick={onOpenNewShortcutDialog}>
                 <span className="quick-link-icon add-link-icon" aria-hidden="true">
                   +
                 </span>
@@ -121,18 +121,18 @@ export function ShortcutGrid({
           };
 
           if (tile.type === "shortcut") {
-            const { quickLink } = tile;
+            const { shortcut } = tile;
             return (
-              <a className={tileClassName} href={quickLink.url} key={tile.key} {...dragProps}>
-                <QuickLinkIcon quickLink={quickLink} />
-                {showLabels ? <span className="quick-link-title">{quickLink.title}</span> : null}
+              <a className={tileClassName} href={shortcut.url} key={tile.key} {...dragProps}>
+                <ShortcutIcon shortcut={shortcut} />
+                {showLabels ? <span className="quick-link-title">{shortcut.title}</span> : null}
                 <button
                   className="quick-link-edit"
                   type="button"
-                  aria-label={`Edit ${quickLink.title}`}
+                  aria-label={`Edit ${shortcut.title}`}
                   onClick={(event) => {
                     event.preventDefault();
-                    onEditQuickLink(quickLink);
+                    onEditShortcut(shortcut);
                   }}
                 >
                   Edit
@@ -163,7 +163,7 @@ export function ShortcutGrid({
                 aria-hidden="true"
               >
                 <FolderIcon strokeWidth={2.25} />
-                <span className="folder-count">{folder.quickLinks.length}</span>
+                <span className="folder-count">{folder.shortcuts.length}</span>
               </span>
               {showLabels ? <span className="quick-link-title">{folder.title}</span> : null}
               <button

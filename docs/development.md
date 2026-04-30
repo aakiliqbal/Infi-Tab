@@ -40,7 +40,7 @@ src/main.tsx                  React entry point
 src/ui/App.tsx                New Tab Surface composition
 src/ui/hooks/useNewTabController.ts  State, persistence, and overlay actions
 src/ui/ShortcutGrid.tsx       Shortcut Page rendering and drag/drop
-src/ui/QuickLinkIcon.tsx      Shortcut icon rendering
+src/ui/ShortcutIcon.tsx       Shortcut icon rendering
 src/ui/SettingsDrawer.tsx     Settings Drawer composition
 src/ui/settings/*             Search, Grid Layout, Wallpaper, and Backup sections
 src/ui/modals/*               Folder and shortcut modal overlays
@@ -70,18 +70,20 @@ The source of truth is `TabState` in `src/domain/tabState.ts`.
 
 Top-level fields:
 
-- `schemaVersion`: currently `1`.
+- `schemaVersion`: currently `2`.
 - `searchProvider`: active fixed search provider.
 - `layout`: search and grid customization settings.
 - `wallpaper`: wallpaper data URL plus stable media ID, dim, and blur settings.
-- `quickLinks`: top-level shortcut tiles.
-- `folders`: folder tiles with contained shortcuts.
+- `tiles`: flat map of all `Shortcut` and `Folder` records by ID.
+- `pages`: ordered Shortcut Pages. Each page owns a `tileIds[]` list for Top-Level Tile display order.
 
-`QuickLink` icons support three modes:
+`Shortcut` icons support three modes:
 
 - `fallback`: generated label and background color.
 - `brand`: bundled Simple Icons ID.
 - `image`: uploaded image data URL plus stable media ID.
+
+Folders store child shortcuts by ID through `childIds[]`; child shortcut records still live in the flat `tiles` map. Legacy schema v1 state and backups are migrated on load/import from `quickLinks`, nested folder `quickLinks`, and `topLevelTiles` into the v2 flat map and page structure.
 
 ## Storage
 
@@ -108,7 +110,7 @@ Import is replace-only:
 3. User confirms replacement.
 4. Current state is replaced.
 
-Older backups missing newer wallpaper fields get defaults for `dim` and `blur`. On load, media IDs are hydrated back into data URLs from IndexedDB.
+Older v1 backups are migrated to schema v2. Backups missing newer wallpaper fields get defaults for `dim` and `blur`. On load, media IDs are hydrated back into data URLs from IndexedDB.
 
 Backup parsing lives in `src/domain/backup.ts` so import compatibility has a dedicated seam.
 

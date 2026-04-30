@@ -38,6 +38,9 @@ A bundled Simple Icons entry matched from shortcut title or URL.
 **Fallback Icon**  
 A generated icon using a short text label and background color when no Brand Icon or uploaded image is available.
 
+**Folder Icon**  
+A Folder tile's default visual is a mini-preview grid of its first child Shortcut icons. The user may override this with a custom label and background color via the Folder edit modal; when set, the custom icon takes priority over the child preview.
+
 ## Current Decisions
 
 - Infi Tab is local-first; no backend or account sync exists in the MVP.
@@ -45,19 +48,23 @@ A generated icon using a short text label and background color when no Brand Ico
 - JSON Backup is replace-only on import.
 - Wallpapers and uploaded icons currently remain portable by being stored as data URLs.
 - The New Tab Surface is a single React app, not multiple extension pages.
-- Shortcut creation tiles participate in Shortcut Page capacity after all user Shortcuts and Folders.
-- Shortcut Pages contain one shared sequence of Top-Level Tiles; Shortcuts and Folders can be arranged together by the user.
-- The display order of Top-Level Tiles is represented by an explicit ordered list of tile references, while Shortcut and Folder records remain the source of tile details.
+- Folders are created exclusively by dragging one Shortcut onto another (gesture-based combine); there is no "Add Folder" button or menu.
+- A Folder always contains at least two Shortcuts; when a removal would leave fewer than two, the Folder is destroyed and any remaining child is promoted to the page.
+- The Shortcut creation tile participates in Shortcut Page capacity after all user Shortcuts and Folders.
+- Shortcuts and Folders can be arranged together by the user within each Shortcut Page.
+- All Shortcut and Folder records live in a single flat map keyed by ID; Folders reference children by ID, not by nesting the records.
+- The display order of Top-Level Tiles is represented by an explicit ordered list of tile references per Shortcut Page, while Shortcut and Folder records remain the source of tile details.
 - Shortcut Page capacity comes from the selected Grid Layout.
 - The main New Tab Surface must not browser-scroll; overlays such as the Settings Drawer and modals may scroll internally.
 - Mouse wheel navigation applies anywhere on the main New Tab Surface, except while an overlay is open or focus is inside a text entry or selection control.
 - Wheel gestures are thresholded so one intentional scroll gesture moves one Shortcut Page.
 - Infinite wrapping applies to previous/next Shortcut Page navigation; absolute navigation such as page-dot selection jumps directly.
+- If a Grid Layout change reduces page capacity, excess tiles on each page spill forward to the next page (creating new pages if needed); tiles are never hidden.
 - If layout changes reduce the number of Shortcut Pages, the active Shortcut Page is clamped to the nearest valid page.
 - After creating a Shortcut or Folder, the active Shortcut Page moves to the page containing the new Top-Level Tile.
 - Editing an existing Shortcut or Folder preserves the active Shortcut Page unless page clamping is required.
 - Initial Top-Level Tile drag-and-drop reorders only within the active Shortcut Page; cross-page drag is deferred.
-- Shortcut Pages are derived windows over the ordered Top-Level Tile list, so deleting a tile shifts later tiles forward instead of leaving page gaps.
+- Each Shortcut Page owns its own ordered list of Top-Level Tile references; tiles compact leftward within a page on deletion but do not flow across page boundaries.
 - Shortcut Page dots are shown only when there is more than one Shortcut Page.
 - Shortcut Page dots are interactive absolute navigation controls.
 - The active Shortcut Page is transient UI state and starts at the first page on each new tab load.
