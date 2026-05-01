@@ -70,6 +70,11 @@ export function applyDropAction(state: Draft<TabState>, action: DropAction): voi
 
       const targetIndex = targetPage.tileIds.indexOf(action.targetTileId);
       const sourceIndex = targetPage.tileIds.indexOf(action.sourceTileId);
+
+      if (targetIndex < 0 || sourceIndex < 0) {
+        return;
+      }
+
       const insertIndex = sourceIndex >= 0 && sourceIndex < targetIndex ? targetIndex - 1 : targetIndex;
       const folderId = action.folderId ?? crypto.randomUUID();
       removeTileFromPages(state.pages, action.sourceTileId);

@@ -24,6 +24,29 @@ describe("applyDropAction", () => {
     expect(next.tiles.combined.kind === "folder" ? next.tiles.combined.childIds : []).toEqual(["a", "b"]);
   });
 
+  it("ignores duplicate combine actions after source and target leave the page", () => {
+    const next = produce(createTestState(), (draft) => {
+      applyDropAction(draft, {
+        type: "COMBINE",
+        sourceTileId: "a",
+        targetTileId: "b",
+        targetPageId: "page-1",
+        folderId: "combined-1"
+      });
+      applyDropAction(draft, {
+        type: "COMBINE",
+        sourceTileId: "a",
+        targetTileId: "b",
+        targetPageId: "page-1",
+        folderId: "combined-2"
+      });
+    });
+
+    expect(next.pages[0].tileIds).toEqual(["combined-1", "folder-1"]);
+    expect(next.tiles["combined-1"].kind === "folder" ? next.tiles["combined-1"].childIds : []).toEqual(["a", "b"]);
+    expect(next.tiles["combined-2"]).toBeUndefined();
+  });
+
   it("adds a shortcut to a folder", () => {
     const next = reduceTestState({ type: "ADD_TO_FOLDER", sourceTileId: "a", folderId: "folder-1" });
 
@@ -46,6 +69,24 @@ describe("applyDropAction", () => {
 
     expect(next.pages[0].tileIds).toEqual(["b", "folder-1"]);
     expect(next.pages[1].tileIds).toEqual(["e", "a", "folder-2"]);
+  });
+
+  it("moves a shortcut from one folder to another (cross-folder)", () => {
+    // c is in folder-1 (childIds: ["c","d"]); move c to folder-2
+    const next = reduceTestState({
+      type: "ADD_TO_FOLDER",
+      sourceTileId: "c",
+      folderId: "folder-2"
+    });
+
+    // c must be in folder-2
+    const folder2 = next.tiles["folder-2"];
+    expect(folder2?.kind === "folder" ? folder2.childIds : []).toContain("c");
+    // folder-1 had only "d" left → dissolved by runFolderCleanup
+    expect(next.tiles["folder-1"]).toBeUndefined();
+    // d is promoted back to page-1 (at folder-1's old position)
+    expect(next.pages[0].tileIds).toContain("d");
+    expect(next.pages[0].tileIds).not.toContain("folder-1");
   });
 
   it("promotes a folder child to a page and cleans up the source folder", () => {
@@ -104,6 +145,73 @@ describe("runFolderCleanup", () => {
   });
 });
 
+describe("applyDropAction multi-row reorder", () => {
+  it("moves tile from row 1 to row 2 correctly - C over I (leading)", () => {
+    // Simulates: grid with 12 slots (2 rows × 6 columns)
+    // Initial: [A, B, C, D, E, F, G, H, I, J, K, L]
+    // Drag: C (index 2) to index 8 (before I at index 8)
+    // Result: [A, B, D, E, F, G, H, I, C, J, K, L]
+    
+    const state: TabState = {
+      schemaVersion: 2,
+      searchProvider: "google",
+      layout: {
+        iconSize: 86, gridGap: 34, columns: 6, showLabels: true,
+        searchPosition: "top", hideSearchBox: false, hideSearchCategory: false,
+        hideSearchButton: false, searchBoxSize: 100, searchBoxRadius: 100,
+        searchBoxOpacity: 96,
+        gridLayout: { mode: "preset", presetId: "2x7", rows: 2, columns: 7, columnSpacing: 100, lineSpacing: 100, iconSize: 100 }
+      },
+      wallpaper: { type: "none", value: null, mediaId: null, dim: 40, blur: 0 },
+      tiles: {
+        a: shortcut("A"), b: shortcut("B"), c: shortcut("C"),
+        d: shortcut("D"), e: shortcut("E"), f: shortcut("F"),
+        g: shortcut("G"), h: shortcut("H"), i: shortcut("I"),
+        j: shortcut("J"), k: shortcut("K"), l: shortcut("L"),
+      },
+      pages: [{ id: "page-1", tileIds: ["a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l"] }]
+    };
+    
+    // Move "c" (from index 2) to index 8 (before I at index 8)
+    const next = produce(state, (draft) => {
+      applyDropAction(draft, { type: "REORDER", tileId: "c", targetPageId: "page-1", toIndex: 8 });
+    });
+    
+    // C should be at index 8, I should shift to index 9
+    expect(next.pages[0].tileIds).toEqual(["a", "b", "d", "e", "f", "g", "h", "i", "c", "j", "k", "l"]);
+  });
+  
+  it("moves tile from row 2 to row 1 - I over C (leading)", () => {
+    const state: TabState = {
+      schemaVersion: 2,
+      searchProvider: "google",
+      layout: {
+        iconSize: 86, gridGap: 34, columns: 6, showLabels: true,
+        searchPosition: "top", hideSearchBox: false, hideSearchCategory: false,
+        hideSearchButton: false, searchBoxSize: 100, searchBoxRadius: 100,
+        searchBoxOpacity: 96,
+        gridLayout: { mode: "preset", presetId: "2x7", rows: 2, columns: 7, columnSpacing: 100, lineSpacing: 100, iconSize: 100 }
+      },
+      wallpaper: { type: "none", value: null, mediaId: null, dim: 40, blur: 0 },
+      tiles: {
+        a: shortcut("A"), b: shortcut("B"), c: shortcut("C"),
+        d: shortcut("D"), e: shortcut("E"), f: shortcut("F"),
+        g: shortcut("G"), h: shortcut("H"), i: shortcut("I"),
+        j: shortcut("J"), k: shortcut("K"), l: shortcut("L"),
+      },
+      pages: [{ id: "page-1", tileIds: ["a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l"] }]
+    };
+    
+    // Move "i" (from index 8) to index 2 (before C at index 2)
+    const next = produce(state, (draft) => {
+      applyDropAction(draft, { type: "REORDER", tileId: "i", targetPageId: "page-1", toIndex: 2 });
+    });
+    
+    // I should be at index 2, C should shift to index 3
+    expect(next.pages[0].tileIds).toEqual(["a", "b", "i", "c", "d", "e", "f", "g", "h", "j", "k", "l"]);
+  });
+});
+
 describe("resolveDrop", () => {
   const zones: DropZone[] = ["leading", "center", "trailing"];
 
@@ -123,6 +231,18 @@ describe("resolveDrop", () => {
       fromFolderId: "folder-1",
       toPageId: "page-1",
       toIndex: 1
+    });
+  });
+
+  it("resolves folder-child drops on the surface to the page end by default", () => {
+    expect(
+      resolveDrop(createTestState(), baseResolveInput({ activeId: "c", overId: "surface", sourceFolderId: "folder-1" }))
+    ).toEqual({
+      type: "PROMOTE",
+      tileId: "c",
+      fromFolderId: "folder-1",
+      toPageId: "page-1",
+      toIndex: 3
     });
   });
 
@@ -161,6 +281,15 @@ describe("resolveDrop", () => {
     );
 
     expect(action.type).toBe("REORDER");
+  });
+
+  it("preserves an explicit reorder insertion index from UI geometry", () => {
+    expect(resolveDrop(createTestState(), baseResolveInput({ overId: "folder-1", overZone: "trailing", toIndex: 0 }))).toEqual({
+      type: "REORDER",
+      tileId: "a",
+      targetPageId: "page-1",
+      toIndex: 0
+    });
   });
 });
 
