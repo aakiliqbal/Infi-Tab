@@ -1,16 +1,8 @@
-import { defineConfig, type Plugin } from "vite";
+import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 
-const removeCrossorigin: Plugin = {
-  name: 'remove-crossorigin',
-  apply: 'build',
-  transformIndexHtml(html: string) {
-    return html.replace(/ crossorigin/g, '');
-  }
-};
-
 export default defineConfig({
-  plugins: [react(), removeCrossorigin],
+  plugins: [react()],
   build: {
     rollupOptions: {
       input: {
