@@ -630,9 +630,7 @@ transition:
 }
 
 .quick-link.dragging-origin {
-  cursor: grabbing;
-  opacity: 0 !important;
-  pointer-events: none;
+  opacity: 0.5 !important;
 }
 
 .quick-link.drag-over .quick-link-icon {
