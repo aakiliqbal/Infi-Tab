@@ -620,25 +620,17 @@ input {
   text-align: center;
   text-decoration: none;
   position: relative;
-  transition:
+transition:
     opacity 140ms ease,
     transform 140ms ease;
 }
 
-.quick-link::before {
-  content: "";
-  position: absolute;
-  top: calc(var(--icon-size) * 0.12);
-  width: 3px;
-  height: calc(var(--icon-size) * 0.76);
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.82);
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity 120ms ease;
+.quick-link[draggable="true"] {
+  cursor: grab;
 }
 
 .quick-link.dragging-origin {
+  cursor: grabbing;
   opacity: 0 !important;
   pointer-events: none;
 }
