@@ -97,6 +97,7 @@ export function ShortcutGrid({
   useEffect(() => {
     if (outgoingDragSource) {
       clearDragSession();
+      dropHandledRef.current = false; // Reset for new folder-child drag
     }
   }, [outgoingDragSource]);
 
@@ -110,7 +111,8 @@ export function ShortcutGrid({
       key: `shortcut:${shortcut.id}`,
       shortcut
     };
-    setDragOverlay({ tile, x: -400, y: -400 });
+    // Use viewport center to match top-page drag behavior - next dragover will snap to cursor
+    setDragOverlay({ tile, x: window.innerWidth / 2, y: window.innerHeight / 2 });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [outgoingDragSource]);
 
@@ -407,8 +409,10 @@ export function ShortcutGrid({
         }}
         onDrop={(e) => {
           e.preventDefault();
+          if (dropHandledRef.current) return;
           // Handle folder-child promote when dropped on a known tile
           if (outgoingDragSource && dropTargetKey) {
+            dropHandledRef.current = true;
             const targetIndex = visibleKeyIndexByKey.get(dropTargetKey) ?? 0;
             const targetPageId = tabState.pages[activeShortcutPageIndex]?.id ?? "page-1";
             const targetTile = draggableTileByKey.get(dropTargetKey)?.tile;

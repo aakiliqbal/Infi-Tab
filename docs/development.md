@@ -1,6 +1,6 @@
 # Development Notes
 
-This document captures the current state of Infi Tab after the initial MVP build.
+This document captures the current state of Infi Tab after the initial MVP build. The detailed HLD/LLD lives in `docs/architecture.md`.
 
 ## Product Direction
 
@@ -10,7 +10,7 @@ Infi Tab is a local-first Chrome new tab extension inspired by Infinity New Tab 
 
 - Chrome Manifest V3 new tab override.
 - React + Vite single-page new tab UI.
-- Quick-link grid with add, edit, delete, and drag reorder.
+- Quick-link grid with add, edit, delete, active-page drag reorder, drag-combine folder creation, and drag-add-to-folder.
 - Folder tiles that open as modal overlays.
 - Shortcut editing with title, URL, fallback label/color, uploaded icon image, and Simple Icons recommendations.
 - Bundled default shortcuts with Simple Icons for common websites.
@@ -29,6 +29,8 @@ Infi Tab is a local-first Chrome new tab extension inspired by Infinity New Tab 
 - `react` and `react-dom` for UI.
 - `vite` for dev/build.
 - `typescript` for type checking.
+- `zustand` and `immer` for persisted app state.
+- `motion` for page and UI animation.
 - `simple-icons` for bundled brand icons.
 - Chrome extension Manifest V3.
 
@@ -38,8 +40,8 @@ Infi Tab is a local-first Chrome new tab extension inspired by Infinity New Tab 
 public/manifest.json          Chrome extension manifest
 src/main.tsx                  React entry point
 src/ui/App.tsx                New Tab Surface composition
-src/ui/hooks/useNewTabController.ts  State, persistence, and overlay actions
-src/ui/ShortcutGrid.tsx       Shortcut Page rendering and drag/drop
+src/ui/hooks/useNewTabController.ts  Transient UI state, store actions, and overlay actions
+src/ui/ShortcutGrid.tsx       Shortcut Page rendering and native drag/drop
 src/ui/ShortcutIcon.tsx       Shortcut icon rendering
 src/ui/SettingsDrawer.tsx     Settings Drawer composition
 src/ui/settings/*             Search, Grid Layout, Wallpaper, and Backup sections
@@ -54,11 +56,14 @@ playwright.config.ts          Browser smoke test config
 src/domain/tabState.ts        App state types and default state
 src/domain/brandIcons.ts      Curated Simple Icons registry and matching
 src/domain/tabOperations.ts   Shortcut, Folder, and layout mutation operations
+src/domain/dropActions.ts     Drag/drop actions and folder cleanup reducer
 src/domain/backup.ts          Backup parsing and compatibility defaults
+src/stores/useTabStore.ts     Zustand + immer persisted state store
 src/infrastructure/fileData.ts  File-to-data-URL adapter
 src/infrastructure/mediaStorage.ts  IndexedDB media adapter and state hydration
 src/infrastructure/tabStorage.ts  Storage adapter
 CONTEXT.md                    Domain glossary and current decisions
+docs/architecture.md          Current HLD and LLD
 docs/architecture-review.md   Architecture deepening notes
 docs/roadmap-issues.md        Future issue backlog
 docs/development.md           Current development notes
@@ -140,14 +145,17 @@ When a shortcut is saved, the app tries to match a bundled Simple Icon using the
 
 Simple Icons is CC0 as a package, but individual brand marks remain subject to their trademark guidelines.
 
-Shortcut and Folder mutation rules live in `src/domain/tabOperations.ts`. This module is the intended test surface for shortcut creation, folder edits, drag reorder, and icon matching.
+Shortcut and Folder editing rules live in `src/domain/tabOperations.ts`. Drag/drop meaning and folder lifecycle rules live in `src/domain/dropActions.ts`.
 
 ## UI Decisions
 
 - Main app is a single new-tab surface rather than separate extension pages.
 - Settings open in a right-side drawer so more controls fit without covering the whole page.
 - Folder contents open in modal overlays.
-- Drag/drop reorder exists, but advanced reorder-vs-folder-combine animation is deferred.
+- Top-Level Tile drag/drop currently uses native HTML drag events with a custom pointer-following overlay.
+- Active-page drag supports reorder, Shortcut-to-Shortcut combine, and Shortcut-to-Folder add.
+- Cross-page drag and Folder child drag-out have domain reducer support but are not wired in the UI.
+- Keyboard and touch drag are future input adapters over the same Drop Action interface.
 - Local JSON backup is the first sync strategy. Account sync is deferred.
 
 ## Development Commands
@@ -175,7 +183,10 @@ Before running the workflow, intentionally bump the version in both version file
 
 ## Current Known Gaps
 
-- Drag/drop lacks polished insertion and folder-combine previews.
+- Drag/drop session logic still lives inside `ShortcutGrid`; it should be extracted before cross-page or folder-child drag is added.
+- Drag UI constructs some Drop Actions directly instead of routing all drops through `resolveDrop()`.
+- Cross-page drag and Folder child drag-out are not wired in the UI.
+- Keyboard and touch drag are not implemented.
 - Favicon lookup for unknown websites is not implemented.
 - Keyboard focus trapping for modals/drawer is not complete.
 - Chrome Web Store assets and privacy text are not prepared.
@@ -183,3 +194,5 @@ Before running the workflow, intentionally bump the version in both version file
 See `docs/roadmap-issues.md` for issue-ready future slices.
 
 See `docs/architecture-review.md` for the latest architecture deepening pass.
+
+See `docs/architecture.md` for the current HLD/LLD.
