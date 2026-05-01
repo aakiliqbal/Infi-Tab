@@ -1,160 +1,168 @@
 # Roadmap Issues
 
-These are future vertical slices for Infi Tab. Each issue is scoped to produce a demoable or verifiable result.
+Current backlog after architecture analysis. Reference extension extracted to `references/infinity-new-tab-pro/`.
 
-## 1. Add automated build and UI smoke test coverage
+## Implemented Features
 
-**Type:** AFK
+- [x] New Tab Surface with wallpaper
+- [x] Search bar with provider selection
+- [x] Paged Shortcut Grid (2x6 default)
+- [x] Grid Layout presets (2x4, 2x5, 2x6, 2x7, 3x3)
+- [x] Custom Grid Layout (rows, columns, spacing, icon size)
+- [x] Top-level Shortcut CRUD
+- [x] Folder creation (drag combine)
+- [x] Top-level reorder (active page)
+- [x] Add shortcut to folder
+- [x] Settings Drawer
+- [x] Wallpaper upload
+- [x] JSON Backup export/import
+- [x] Zustand + Immer state
+- [x] chrome.storage.local persistence
 
-## What to build
+## Remaining Issues
 
-Add a basic automated verification path for the extension so future changes can be checked beyond a local manual review. This should cover the production build and at least one browser-level smoke test that opens the new tab UI and verifies the main surfaces render.
-
-## Acceptance criteria
-
-- [ ] `npm run build` is run in CI on pull requests.
-- [ ] A browser smoke test verifies the new tab shell, settings drawer, shortcut grid, and backup controls render without runtime errors.
-- [ ] The test command is documented in `README.md`.
-
-## Blocked by
-
-None - can start immediately
-
-## 2. Harden backup import with schema migration and preview validation
-
-**Type:** AFK
-
-## What to build
-
-Make JSON import safer by validating backup contents before replacement and by migrating older backup shapes to the current schema. The import flow should still be replace-only, but users should get clear feedback before destructive restore.
-
-## Acceptance criteria
-
-- [ ] Older backups missing newer optional fields import with defaults.
-- [ ] Invalid backup files show a specific error instead of a generic failure.
-- [ ] Import confirmation summarizes what will be replaced.
-- [ ] Backup import/export behavior is covered by tests.
-
-## Blocked by
-
-Blocked by issue 1 if browser/UI tests are used; otherwise can start immediately.
-
-## 3. Move large wallpaper/icon media to IndexedDB while preserving JSON backups
+### 1. Extract Top-Level Tile Drag Hook
 
 **Type:** AFK
 
-## What to build
+Move native drag session state and handlers from `ShortcutGrid.tsx` into `useTopLevelTileDrag()` hook.
 
-Store large user media such as wallpapers, GIFs, and uploaded shortcut icons in IndexedDB instead of keeping all media directly inside `chrome.storage.local`. JSON export/import must still include the media content so backups remain portable.
+**Acceptance criteria:**
+- [ ] `ShortcutGrid.tsx` no longer owns raw drag timers or overlay state
+- [ ] New hook exposes props/handlers for tiles
+- [ ] Active-page reorder works
+- [ ] Combine and add-to-folder work
+- [ ] Debug logging removed
+- [ ] Tests pass
 
-## Acceptance criteria
+**Blocked by:** None
 
-- [ ] Uploaded wallpapers and custom icons are stored in IndexedDB.
-- [ ] App state references media by stable internal IDs.
-- [ ] JSON export serializes media content into the backup file.
-- [ ] JSON import restores media into IndexedDB and reconnects state references.
-- [ ] Large GIF wallpaper behavior is verified.
+### 2. Route Native Drag Through resolveDrop()
 
-## Blocked by
+**Type:** AFK
 
-Blocked by issue 2.
+Wire `resolveDrop()` as the decision function for native drag drops instead of constructing actions directly in UI.
 
-## 4. Add polished drag/drop intent animation and folder combine behavior
+**Acceptance criteria:**
+- [ ] UI zone names map to domain zone names
+- [ ] handleDrop calls resolveDrop()
+- [ ] No duplicate action construction
+- [ ] dropActions.test.ts covers decision table
+
+**Blocked by:** Issue 1
+
+### 3. Cross-Page Drag
 
 **Type:** HITL
 
-## What to build
+Wire cross-page drag with page-edge preview.
 
-Upgrade shortcut dragging so users can distinguish reorder intent from folder-combine intent. Dragging near an edge should preview insertion; dragging over the center should preview combining into a folder. Dropping onto a compatible target should create or update a folder.
+**Acceptance criteria:**
+- [ ] 48px edge zones active during drag
+- [ ] 300ms edge hold previews adjacent page
+- [ ] Drop triggers CROSS_PAGE
+- [ ] No empty pages after drop
 
-## Acceptance criteria
+**Blocked by:** Issue 2
 
-- [ ] Reorder intent animates nearby icons left/right or up/down.
-- [ ] Combine intent has a visually distinct hover state.
-- [ ] Dropping one shortcut onto another creates a folder.
-- [ ] Dropping onto an existing folder adds the shortcut to that folder.
-- [ ] Folder creation through drag/drop persists and survives reload.
-
-## Blocked by
-
-None - can start immediately.
-
-## 5. Expand icon recommendations and add optional favicon lookup
+### 4. FolderPanel Child Drag
 
 **Type:** HITL
 
-## What to build
+Allow dragging folder children to surface.
 
-Improve icon recommendations when users add shortcuts. Keep bundled Simple Icons matching for known brands, and decide whether to add favicon lookup for sites not covered by Simple Icons.
+**Acceptance criteria:**
+- [ ] Child reorder in FolderPanel
+- [ ] Drag out triggers PROMOTE
+- [ ] 2-child folder cleanup works
+- [ ] Cancel restores position
 
-## Acceptance criteria
+**Blocked by:** Issue 2
 
-- [ ] Recommendation matching covers more common websites.
-- [ ] The shortcut editor shows useful recommendations from title and URL.
-- [ ] Unknown websites still fall back to generated label icons.
-- [ ] If favicon lookup is enabled, permissions and privacy impact are documented.
-- [ ] User-uploaded icons continue to override recommendations.
-
-## Blocked by
-
-None - can start immediately.
-
-## 6. Add settings drawer sections for icon, folder, and layout customization
+### 5. Folder Icon Mini-Preview Grid
 
 **Type:** AFK
 
-## What to build
+Show first child icons in Folder tile.
 
-Extend the settings drawer so customization is easier to scan and closer to the reference screenshots. Add dedicated sections for icon appearance, folder behavior, and grid layout while preserving the current settings.
+**Acceptance criteria:**
+- [ ] Mini grid of child icons
+- [ ] Updates on child changes
+- [ ] User-edited label still works
+- [ ] Legible at all icon sizes
 
-## Acceptance criteria
+**Blocked by:** None
 
-- [ ] Settings drawer has clear sections for Search, Wallpaper, Icons, Folders, Layout, and Backup.
-- [ ] Icon settings apply globally without breaking per-shortcut custom icons.
-- [ ] Folder settings are reflected in folder tiles and folder modals.
-- [ ] Drawer remains usable at mobile and desktop viewport sizes.
-
-## Blocked by
-
-None - can start immediately.
-
-## 7. Add keyboard accessibility and focus management across modals/drawer
-
-**Type:** AFK
-
-## What to build
-
-Make the extension usable with keyboard navigation. Focus should move predictably into dialogs/drawers, stay contained while open, and return to the triggering control when closed.
-
-## Acceptance criteria
-
-- [ ] Settings drawer traps focus while open.
-- [ ] Shortcut and folder modals trap focus while open.
-- [ ] `Escape` closes the active overlay only.
-- [ ] Focus returns to the trigger after closing.
-- [ ] Interactive controls have accessible names.
-
-## Blocked by
-
-Blocked by issue 1 if browser/UI tests are used; otherwise can start immediately.
-
-## 8. Prepare Chrome Web Store release package
+### 6. Keyboard Drag
 
 **Type:** HITL
 
-## What to build
+Accessible keyboard drag operations.
 
-Prepare the extension for Chrome Web Store submission. This includes permissions review, privacy wording, screenshots, store copy, icon assets, and a packaged release artifact.
+**Acceptance criteria:**
+- [ ] Keyboard reorder works
+- [ ] Keyboard combine has command path
+- [ ] aria-live announcements
+- [ ] Reduced motion works
 
-## Acceptance criteria
+**Blocked by:** Issue 2
 
-- [ ] Extension permissions are reviewed and justified.
-- [ ] Privacy policy/store disclosure text is drafted.
-- [ ] Required extension icons are added.
-- [ ] Store screenshots are captured from the current UI.
-- [ ] Release zip from GitHub Actions can be uploaded to the Chrome Web Store.
+### 7. Icon Recommendations
 
-## Blocked by
+**Type:** HITL
 
-Blocked by issue 1 and the release workflow being merged to `main`.
+Improve brand icon matching.
 
+**Acceptance criteria:**
+- [ ] More common sites covered
+- [ ] Unknown falls back to generated
+- [ ] Optional favicon toggle
+
+**Blocked by:** None
+
+### 8. Focus Management
+
+**Type:** AFK
+
+Keyboard-safe overlays.
+
+**Acceptance criteria:**
+- [ ] Focus trap in each overlay
+- [ ] Escape closes only active
+- [ ] Focus returns on close
+
+**Blocked by:** None
+
+### 9. Chrome Web Store Release
+
+**Type:** HITL
+
+Prepare for CWS submission.
+
+**Acceptance criteria:**
+- [ ] Permissions reviewed
+- [ ] Privacy text drafted
+- [ ] Required icons added
+- [ ] Screenshots captured
+- [ ] Release artifact ready
+
+**Blocked by:** Release readiness
+
+## Completed Issues
+
+These were completed in earlier work:
+
+- [x] Project scaffold
+- [x] React + Vite + TypeScript setup
+- [x] Zustand + Immer store
+- [x] Basic CRUD for Shortcuts
+- [x] Folder edit/delete modal
+- [x] FolderPanel view
+- [x] Search provider selection
+- [x] Wallpaper system
+- [x] JSON backup
+- [x] Page dots navigation
+- [x] Wheel navigation
+- [x] Keyboard navigation
+- [x] Animation (reduced motion)
+- [x] FolderPanel Child Drag (outgoing drag freeze bugfix)
