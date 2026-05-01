@@ -188,6 +188,7 @@ export function ShortcutGrid({
   const handleDragStart = (e: React.DragEvent<HTMLElement>, tileKey: string, index: number) => {
     const tile = draggableTileByKey.get(tileKey)?.tile;
     if (!tile) return;
+    
     dropHandledRef.current = false;
     
     const initialRects = captureTileRects(gridRef.current);
@@ -201,7 +202,6 @@ export function ShortcutGrid({
     setDropTargetKey(null);
     setDropPosition(null);
     
-    // Set up drag overlay for real tile following pointer
     setDragOverlay({
       tile,
       x: e.clientX,
@@ -210,11 +210,6 @@ export function ShortcutGrid({
     
     e.dataTransfer.effectAllowed = "move";
     e.dataTransfer.setData("text/plain", tileKey);
-    
-    // Hide default drag image - we'll use our custom overlay
-    const img = new Image();
-    img.src = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
-    e.dataTransfer.setDragImage(img, 0, 0);
   };
 
   const handleDragOver = (e: React.DragEvent<HTMLElement>, tileKey: string, rect: DOMRect) => {
