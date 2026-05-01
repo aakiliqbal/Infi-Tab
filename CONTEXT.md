@@ -9,7 +9,7 @@ The browser page rendered by Infi Tab when Chrome opens a new tab.
 A top-level or folder-contained link with a title, URL, and icon.
 
 **Shortcut Page**  
-A visible partition of the New Tab Surface's Shortcut and Folder tiles, sized so it fits within the viewport without vertical page scrolling.
+A visible partition of the New Tab Surface's Shortcut and Folder tiles, sized to fit within the viewport without vertical page scrolling.
 _Avoid_: browser page, tab page, slide
 
 **Folder**  
@@ -38,46 +38,105 @@ A bundled Simple Icons entry matched from shortcut title or URL.
 **Fallback Icon**  
 A generated icon using a short text label and background color when no Brand Icon or uploaded image is available.
 
+**Folder Icon**  
+A Folder tile's current visual shows a folder glyph with a child count badge.
+
+**Drag Intent**  
+The transient interpretation of a drag gesture before drop: leading (left zone), center (combine/add), or trailing (right zone). Drag Intent belongs to UI geometry.
+
+**Drag Source**  
+The UI description of what is being dragged before it becomes a Drop Action. A Drag Source may be a Top-Level Tile or a Folder-contained Shortcut.
+
+**Drop Target**  
+The UI description of where the current drag is aiming before it becomes a Drop Action. A Drop Target may be a Top-Level Tile, Folder child position, Folder end, Shortcut Page surface, or page edge.
+
+**Drop Preview**  
+The transient pairing of a Drag Source and Drop Target used to render insertion, reorder, combine, promotion, and cross-page feedback before commit.
+
+**Drop Action**  
+A domain command produced from Drag Intent: `REORDER`, `COMBINE`, `ADD_TO_FOLDER`, `CROSS_PAGE`, `PROMOTE`, or `CANCEL`.
+
 ## Current Decisions
+
+### Persistence
 
 - Infi Tab is local-first; no backend or account sync exists in the MVP.
 - `chrome.storage.local` is the runtime persistence adapter.
 - JSON Backup is replace-only on import.
-- Wallpapers and uploaded icons currently remain portable by being stored as data URLs.
+- Wallpapers and uploaded icons remain portable as data URLs.
+
+### Product Structure
+
 - The New Tab Surface is a single React app, not multiple extension pages.
-- Shortcut creation tiles participate in Shortcut Page capacity after all user Shortcuts and Folders.
-- Shortcut Pages contain one shared sequence of Top-Level Tiles; Shortcuts and Folders can be arranged together by the user.
-- The display order of Top-Level Tiles is represented by an explicit ordered list of tile references, while Shortcut and Folder records remain the source of tile details.
-- Shortcut Page capacity comes from the selected Grid Layout.
-- The main New Tab Surface must not browser-scroll; overlays such as the Settings Drawer and modals may scroll internally.
-- Mouse wheel navigation applies anywhere on the main New Tab Surface, except while an overlay is open or focus is inside a text entry or selection control.
-- Wheel gestures are thresholded so one intentional scroll gesture moves one Shortcut Page.
-- Infinite wrapping applies to previous/next Shortcut Page navigation; absolute navigation such as page-dot selection jumps directly.
-- If layout changes reduce the number of Shortcut Pages, the active Shortcut Page is clamped to the nearest valid page.
-- After creating a Shortcut or Folder, the active Shortcut Page moves to the page containing the new Top-Level Tile.
-- Editing an existing Shortcut or Folder preserves the active Shortcut Page unless page clamping is required.
-- Initial Top-Level Tile drag-and-drop reorders only within the active Shortcut Page; cross-page drag is deferred.
-- Shortcut Pages are derived windows over the ordered Top-Level Tile list, so deleting a tile shifts later tiles forward instead of leaving page gaps.
-- Shortcut Page dots are shown only when there is more than one Shortcut Page.
-- Shortcut Page dots are interactive absolute navigation controls.
-- The active Shortcut Page is transient UI state and starts at the first page on each new tab load.
-- Shortcut Page pagination applies only to Top-Level Tiles on the New Tab Surface; Folder modal contents are outside this feature.
-- When there are no user Top-Level Tiles, creation tiles appear on the first Shortcut Page and do not require page dots unless pagination is actually needed.
-- A Grid Layout's rows and columns define the tile slots on each Shortcut Page.
-- The selected Grid Layout's row and column count is preserved across viewports; tile presentation may scale down to avoid browser scrolling.
-- Grid Layout presets are 2x4, 2x5, 2x6, 2x7, and 3x3, with a Customize option for user-defined rows and columns.
-- Custom Grid Layout rows and columns range from 1 to 8 and default to the currently selected Grid Layout when opened.
-- The Settings Drawer replaces the generic Layout section with Grid Layout controls; row count, column count, column spacing, line spacing, and icon size are configured through Grid Layout customization.
-- Grid Layout persistence records both preset/custom mode and numeric row, column, spacing, and icon-size values.
-- Selecting a Grid Layout preset overwrites rows and columns with preset values while preserving current spacing and icon-size values.
-- Column spacing, line spacing, and icon size apply across preset and custom Grid Layout modes.
-- Grid Layout uses separate column spacing and line spacing settings.
-- Grid Layout icon size is stored and displayed as a percentage from 50% to 120%.
-- Grid Layout column spacing and line spacing are stored and displayed as percentages from 0% to 100%.
-- The default Grid Layout is the 2x6 preset with 100% icon size, 100% column spacing, and 100% line spacing.
-- A small footer area is reserved for Shortcut Page controls even when page dots are hidden, keeping capacity measurement stable.
-- Shortcut Page changes use a short fade/slide transition, disabled when reduced motion is requested.
-- Keyboard previous/next navigation uses PageUp/PageDown or ArrowLeft/ArrowRight on the main New Tab Surface, except inside inputs or overlays.
-- Touch swipe navigation between Shortcut Pages is deferred.
-- Existing state without an explicit Top-Level Tile order migrates to the previous visual order: Shortcuts first, then Folders.
-- The Shortcut Page feature is implemented in two slices: first persistent Top-Level Tile ordering, then measured pagination and navigation.
+- Folders are created by dragging one Shortcut onto another (gesture-based combine).
+- A Folder always contains at least two Shortcuts; removal that leaves one child promotes it to the page.
+- The Shortcut creation tile participates in Shortcut Page capacity after all user tiles.
+
+### Tile Management
+
+- Shortcuts and Folders can be arranged together within each Shortcut Page.
+- All tile records live in a single flat map keyed by ID.
+- Folder membership lives only in `folder.childIds`, not by nesting records.
+- Display order lives in per-page `tileIds` arrays, not in tile records.
+
+### Shortcut Pages
+
+- Shortcut Page capacity comes from Grid Layout.
+- The main surface must not browser-scroll; overlays may scroll internally.
+- Mouse wheel navigation applies to Shortcut Pages (thresholded).
+- Infinite wrapping for next/prev navigation.
+- Page dots shown only when `pageCount > 1`.
+- Active page is transient UI state, resets on new tab.
+
+### Grid Layout
+
+- Grid Layout presets: 2x4, 2x5, 2x6, 2x7, 3x3, and Customize.
+- Custom rows/columns range 1-8.
+- Default: 2x6 preset with 100% icon size and spacing.
+- Row, column, spacing, icon size stored as percentages (50-120% for icon).
+- Grid Layout preserved across viewports; presentation scales to avoid scrolling.
+
+### Drag and Drop
+
+- Top-Level Tile drag uses native HTML drag events with custom pointer-following overlay.
+- Active-page drag supports reorder, combine, and add-to-folder.
+- Drag UI maps Drag Source plus Drop Target into Drop Action through `src/ui/drag/dropActionAdapter.ts`.
+- Drag Intent uses left/center/right UI zones (30%/40%/30%).
+- Zone confirmation uses 200ms debounce timer.
+- Cross-page drag is supported in the domain reducer but not wired in the UI.
+- Folder child drag-out promotion is supported in reducer but not wired.
+- Keyboard and touch drag are separate future work.
+
+### Technology
+
+- React 18 + TypeScript + Vite
+- Zustand + Immer for state management
+- chrome.storage.local for persistence
+- Native HTML drag events
+- Motion (Framer Motion) with reduced motion support
+- CSS Modules for styling
+
+### Implemented Features
+
+- [x] New Tab Surface with wallpaper layer
+- [x] Search bar with configurable providers
+- [x] Paged tile grid (Shortcut Pages)
+- [x] Grid Layout with presets and customization
+- [x] Shortcut CRUD
+- [x] Folder creation via drag combine
+- [x] Folder edit/delete modal
+- [x] FolderPanel child view
+- [x] Top-level reorder
+- [x] Add shortcut to folder
+- [x] Settings Drawer
+- [x] Wallpaper upload
+- [x] JSON Backup export/import
+- [x] Page navigation (dots, wheel, keyboard)
+- [x] Reduced motion support
+
+### Reference Extension
+
+- Extracted to `references/infinity-new-tab-pro/`
+- Used for product behavior evidence only
+- Not for copying implementation, assets, or code
+- Confirms product shape: full-viewport, search, paged grid, folders, wallpaper, settings

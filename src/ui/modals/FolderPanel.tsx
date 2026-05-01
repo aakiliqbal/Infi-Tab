@@ -1,36 +1,321 @@
-import { type Folder, type QuickLink } from "../../domain/tabState";
-import { QuickLinkIcon } from "../QuickLinkIcon";
+import { useState, useRef, useCallback, useEffect, type DragEvent } from "react";
+import type { DropAction } from "../../domain/dropActions";
+import { type ResolvedFolder } from "../../domain/tabOperations";
+import { type Shortcut, type TabState } from "../../domain/tabState";
+import { createDropAction } from "../drag/dropActionAdapter";
+import { getDropPosition, computeDropIndex } from "../drag/dragGeometry";
+import type { DragSource, DropTarget } from "../drag/dragModel";
+import { ShortcutIcon } from "../ShortcutIcon";
 
 type FolderPanelProps = {
-  activeFolder: Folder;
+  activeFolder: ResolvedFolder;
+  activeShortcutPageIndex: number;
+  dispatchDropAction: (action: DropAction) => void;
   onClose: () => void;
-  onEditFolder: (folder: Folder) => void;
-  onEditQuickLink: (quickLink: QuickLink) => void;
-  onOpenNewQuickLinkDialog: () => void;
+  onEditFolder: (folder: ResolvedFolder) => void;
+  onEditShortcut: (shortcut: Shortcut) => void;
+  onOpenNewShortcutDialog: () => void;
+  onStartOutgoingDrag: (source: DragSource) => void;
+  tabState: TabState;
 };
 
 export function FolderPanel({
   activeFolder,
+  activeShortcutPageIndex,
+  dispatchDropAction,
   onClose,
   onEditFolder,
-  onEditQuickLink,
-  onOpenNewQuickLinkDialog
+  onEditShortcut,
+  onOpenNewShortcutDialog,
+  onStartOutgoingDrag,
+  tabState
 }: FolderPanelProps) {
+  const [draggedShortcutId, setDraggedShortcutId] = useState<string | null>(null);
+  const [dropTargetId, setDropTargetId] = useState<string | null>(null);
+  const [dropPosition, setDropPosition] = useState<"left" | "right">("left");
+  const [overlayPos, setOverlayPos] = useState<{ x: number; y: number } | null>(null);
+  const dragSourceRef = useRef<DragSource | null>(null);
+  // Tracks whether we've already started the "drag out" sequence so we don't
+  // fire onStartOutgoingDrag / onClose more than once per gesture.
+  const outgoingDragStartedRef = useRef(false);
+  const activePageId = tabState.pages[activeShortcutPageIndex]?.id ?? "page-1";
+
+  const clearDrag = useCallback(() => {
+    setDraggedShortcutId(null);
+    setDropTargetId(null);
+    setOverlayPos(null);
+    dragSourceRef.current = null;
+    outgoingDragStartedRef.current = false;
+  }, []);
+
+  // Track pointer position while dragging to render a custom overlay tile
+  useEffect(() => {
+    if (!draggedShortcutId) {
+      setOverlayPos(null);
+      return;
+    }
+    const handleMove = (e: MouseEvent) => setOverlayPos({ x: e.clientX, y: e.clientY });
+    const handleEnd = () => setOverlayPos(null);
+    window.addEventListener("dragover", handleMove);
+    window.addEventListener("dragend", handleEnd);
+    window.addEventListener("drop", handleEnd);
+    return () => {
+      window.removeEventListener("dragover", handleMove);
+      window.removeEventListener("dragend", handleEnd);
+      window.removeEventListener("drop", handleEnd);
+    };
+  }, [draggedShortcutId]);
+
+  // Returns the topmost .quick-link tile on the main grid at a given viewport
+  // point, bypassing the backdrop overlay (elementsFromPoint ignores z-index /
+  // pointer-events for the purpose of returning all elements geometrically).
+  const findGridTileBelow = useCallback((clientX: number, clientY: number): Element | null => {
+    return (
+      document
+        .elementsFromPoint(clientX, clientY)
+        .find(
+          (el) =>
+            el.classList.contains("quick-link") &&
+            !el.classList.contains("folder-item") &&
+            !el.closest(".folder-panel")
+        ) ?? null
+    );
+  }, []);
+
+  const handleDragStart = useCallback(
+    (shortcut: { id: string }) => {
+      setDraggedShortcutId(shortcut.id);
+      dragSourceRef.current = {
+        kind: "folder-child",
+        shortcutId: shortcut.id,
+        folderId: activeFolder.id,
+        pageId: activePageId,
+        index: activeFolder.childIds.indexOf(shortcut.id)
+      };
+    },
+    [activeFolder.id, activeFolder.childIds, activePageId]
+  );
+
+  // ── Within-folder reorder ─────────────────────────────────────────────────
+
+  const handleDropOnChild = useCallback(
+    (targetShortcutId: string, position: "left" | "right") => {
+      const source = dragSourceRef.current;
+      if (!source || source.kind !== "folder-child") return;
+
+      const targetIndex = activeFolder.childIds.indexOf(targetShortcutId);
+      const atIndex = computeDropIndex(source.index, targetIndex, position);
+      const target: DropTarget = {
+        kind: "folder-child",
+        folderId: activeFolder.id,
+        shortcutId: targetShortcutId,
+        index: atIndex, // use computed index (accounts for source removal shift)
+        zone: position === "left" ? "leading" : "trailing"
+      };
+
+      dispatchDropAction(createDropAction(source, target));
+      clearDrag();
+    },
+    [activeFolder.id, activeFolder.childIds, dispatchDropAction, clearDrag]
+  );
+
+  const getChildDropPosition = (event: DragEvent<HTMLElement>): "left" | "right" => {
+    const rect = (event.currentTarget as HTMLElement).closest(".folder-item")?.getBoundingClientRect();
+    if (!rect) return "left";
+    return getDropPosition(event.clientX, rect) === "right" ? "right" : "left";
+  };
+
+  // ── Backdrop drag handlers ────────────────────────────────────────────────
+
+  /**
+   * As soon as the cursor reaches the dimmed backdrop area (outside the folder
+   * panel dialog), we immediately close the folder and hand off to ShortcutGrid
+   * via outgoingDragSource — exactly like Infinity Pro.
+   *
+   * The outgoingDragStartedRef guard ensures we call onClose / onStartOutgoingDrag
+   * only once even though dragOver fires continuously.
+   */
+  const handleBackdropDragOver = useCallback(
+    (event: DragEvent<HTMLDivElement>) => {
+      if (!draggedShortcutId) return;
+      event.preventDefault();
+      event.dataTransfer.dropEffect = "move";
+
+      if (!outgoingDragStartedRef.current) {
+        outgoingDragStartedRef.current = true;
+        const source: DragSource = {
+          kind: "folder-child",
+          shortcutId: draggedShortcutId,
+          folderId: activeFolder.id,
+          pageId: activePageId,
+          index: activeFolder.childIds.indexOf(draggedShortcutId)
+        };
+        onStartOutgoingDrag(source);
+        onClose(); // Reveal the main grid so the user can drop precisely
+      }
+    },
+    [draggedShortcutId, activeFolder.id, activeFolder.childIds, activePageId, onStartOutgoingDrag, onClose]
+  );
+
+  /**
+   * Fallback: the user dropped while the backdrop was still mounted (React
+   * re-render hadn't processed onClose yet).  We dispatch the correct action
+   * using elementsFromPoint so we still get precise placement.
+   */
+  const handleBackdropDrop = useCallback(
+    (event: DragEvent<HTMLDivElement>) => {
+      event.preventDefault();
+      if (!draggedShortcutId) return;
+
+      const tileEl = findGridTileBelow(event.clientX, event.clientY);
+      const tileKey = tileEl?.getAttribute("data-tile-key") ?? null;
+      const targetPageId = activePageId;
+      const targetPage = tabState.pages[activeShortcutPageIndex];
+
+      if (tileKey) {
+        const tileId = tileKey.includes(":") ? tileKey.split(":").slice(1).join(":") : tileKey;
+        const tile = tabState.tiles[tileId];
+
+        if (tile?.kind === "folder" && tileId !== activeFolder.id) {
+          dispatchDropAction({
+            type: "ADD_TO_FOLDER",
+            sourceTileId: draggedShortcutId,
+            folderId: tileId
+          });
+        } else {
+          const tileIndex = targetPage?.tileIds.indexOf(tileId) ?? -1;
+          const dropPos = tileEl ? getDropPosition(event.clientX, tileEl.getBoundingClientRect()) : "right";
+          const atIndex =
+            dropPos === "right"
+              ? tileIndex >= 0 ? tileIndex + 1 : (targetPage?.tileIds.length ?? 0)
+              : tileIndex >= 0 ? tileIndex : 0;
+          dispatchDropAction({
+            type: "PROMOTE",
+            tileId: draggedShortcutId,
+            fromFolderId: activeFolder.id,
+            toPageId: targetPageId,
+            toIndex: atIndex
+          });
+        }
+      } else {
+        dispatchDropAction({
+          type: "PROMOTE",
+          tileId: draggedShortcutId,
+          fromFolderId: activeFolder.id,
+          toPageId: targetPageId,
+          toIndex: targetPage?.tileIds.length ?? 0
+        });
+      }
+
+      // Only call onClose if the folder wasn't already closing
+      if (!outgoingDragStartedRef.current) onClose();
+      clearDrag();
+    },
+    [
+      draggedShortcutId,
+      activeFolder.id,
+      activePageId,
+      activeShortcutPageIndex,
+      tabState,
+      dispatchDropAction,
+      onClose,
+      clearDrag,
+      findGridTileBelow
+    ]
+  );
+
+  // Fires when cursor leaves the viewport entirely (goes to browser chrome).
+  const handleBackdropDragLeave = useCallback(
+    (event: DragEvent<HTMLDivElement>) => {
+      const related = event.relatedTarget as Node | null;
+      // Ignore events caused by cursor moving between child elements
+      if (related && (event.currentTarget as HTMLElement).contains(related)) return;
+
+      if (!draggedShortcutId) return;
+      if (outgoingDragStartedRef.current) return; // Already handled
+
+      // Cursor left the viewport — set outgoing source and close
+      outgoingDragStartedRef.current = true;
+      onStartOutgoingDrag({
+        kind: "folder-child",
+        shortcutId: draggedShortcutId,
+        folderId: activeFolder.id,
+        pageId: activePageId,
+        index: activeFolder.childIds.indexOf(draggedShortcutId)
+      });
+      onClose();
+    },
+    [
+      draggedShortcutId,
+      activeFolder.id,
+      activeFolder.childIds,
+      activePageId,
+      onStartOutgoingDrag,
+      onClose
+    ]
+  );
+
+  // ── Within-folder item drag handlers ─────────────────────────────────────
+
+  const handleDragEnter = useCallback(
+    (event: DragEvent<HTMLElement>, shortcutId: string) => {
+      if (!draggedShortcutId || shortcutId === draggedShortcutId) return;
+      event.preventDefault();
+      setDropTargetId(shortcutId);
+      setDropPosition(getChildDropPosition(event));
+    },
+    [draggedShortcutId]
+  );
+
+  const handleDragLeave = useCallback(() => {
+    setDropTargetId(null);
+  }, []);
+
+  const handleChildDrop = useCallback(
+    (event: DragEvent<HTMLElement>, targetShortcutId: string) => {
+      event.preventDefault();
+      event.stopPropagation();
+      if (!draggedShortcutId || targetShortcutId === draggedShortcutId) return;
+      handleDropOnChild(targetShortcutId, getChildDropPosition(event));
+    },
+    [draggedShortcutId, handleDropOnChild]
+  );
+
   return (
     <div
-      className="folder-backdrop"
+      className={["folder-backdrop", draggedShortcutId ? "folder-drop-target" : ""].filter(Boolean).join(" ")}
       role="presentation"
+      onDragOver={handleBackdropDragOver}
+      onDragLeave={handleBackdropDragLeave}
+      onDrop={handleBackdropDrop}
       onMouseDown={(event) => {
         if (event.target === event.currentTarget) {
           onClose();
         }
       }}
     >
-      <section className="folder-panel" role="dialog" aria-modal="true" aria-labelledby="folder-panel-title">
+      <section
+        className="folder-panel"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="folder-panel-title"
+        onDragOver={(event) => {
+          if (draggedShortcutId) {
+            event.preventDefault();
+            event.stopPropagation();
+          }
+        }}
+        onDrop={(event) => {
+          if (draggedShortcutId) {
+            event.preventDefault();
+            event.stopPropagation();
+          }
+        }}
+      >
         <div className="folder-header">
           <div>
             <h1 id="folder-panel-title">{activeFolder.title}</h1>
-            <span>{activeFolder.quickLinks.length} shortcuts</span>
+            <span>{activeFolder.shortcuts.length} shortcuts</span>
           </div>
           <div className="folder-actions">
             <button className="secondary-button" type="button" onClick={() => onEditFolder(activeFolder)}>
@@ -43,17 +328,51 @@ export function FolderPanel({
         </div>
 
         <div className="folder-grid">
-          {activeFolder.quickLinks.map((quickLink) => (
-            <a className="quick-link folder-item" href={quickLink.url} key={quickLink.id}>
-              <QuickLinkIcon quickLink={quickLink} />
-              <span className="quick-link-title">{quickLink.title}</span>
+          {activeFolder.shortcuts.map((shortcut) => (
+            <a
+              className={[
+                "quick-link",
+                "folder-item",
+                draggedShortcutId === shortcut.id ? "dragging-origin" : "",
+                dropTargetId === shortcut.id ? (dropPosition === "left" ? "drop-leading" : "drop-trailing") : ""
+              ]
+                .filter(Boolean)
+                .join(" ")}
+              draggable={true}
+              href={shortcut.url}
+              key={shortcut.id}
+              onDragEnd={clearDrag}
+              onDragStart={(event) => {
+                handleDragStart({ id: shortcut.id });
+                event.dataTransfer.effectAllowed = "move";
+                event.dataTransfer.setData("text/plain", shortcut.id);
+                // Hide the browser's default ghost image — ShortcutGrid renders
+                // a custom overlay once the folder panel closes.
+                const blank = new Image();
+                blank.src =
+                  "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7";
+                event.dataTransfer.setDragImage(blank, 0, 0);
+              }}
+              onDragEnter={(event) => handleDragEnter(event, shortcut.id)}
+              onDragLeave={handleDragLeave}
+              onDragOver={(event) => {
+                if (draggedShortcutId && shortcut.id !== draggedShortcutId) {
+                  event.preventDefault();
+                  setDropTargetId(shortcut.id);
+                  setDropPosition(getChildDropPosition(event));
+                }
+              }}
+              onDrop={(event) => handleChildDrop(event, shortcut.id)}
+            >
+              <ShortcutIcon shortcut={shortcut} />
+              <span className="quick-link-title">{shortcut.title}</span>
               <button
                 className="quick-link-edit"
                 type="button"
-                aria-label={`Edit ${quickLink.title}`}
+                aria-label={`Edit ${shortcut.title}`}
                 onClick={(event) => {
                   event.preventDefault();
-                  onEditQuickLink(quickLink);
+                  onEditShortcut(shortcut);
                 }}
               >
                 Edit
@@ -61,7 +380,7 @@ export function FolderPanel({
             </a>
           ))}
 
-          <button className="quick-link add-link" type="button" onClick={onOpenNewQuickLinkDialog}>
+          <button className="quick-link add-link" type="button" onClick={onOpenNewShortcutDialog}>
             <span className="quick-link-icon add-link-icon" aria-hidden="true">
               +
             </span>
@@ -69,6 +388,27 @@ export function FolderPanel({
           </button>
         </div>
       </section>
+
+      {/* Custom drag overlay — tile follows the cursor while dragging within the folder */}
+      {draggedShortcutId && overlayPos && (() => {
+        const tile = tabState.tiles[draggedShortcutId];
+        if (!tile || tile.kind !== "shortcut") return null;
+        return (
+          <div
+            className="drag-overlay-tile"
+            style={{
+              position: "fixed",
+              left: overlayPos.x - 40,
+              top: overlayPos.y - 40,
+              pointerEvents: "none",
+              zIndex: 9999,
+            }}
+          >
+            <ShortcutIcon shortcut={tile} />
+            <span className="quick-link-title">{tile.title}</span>
+          </div>
+        );
+      })()}
     </div>
   );
 }

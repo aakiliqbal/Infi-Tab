@@ -1,6 +1,6 @@
 import type { BrandIconId } from "../../domain/brandIcons";
 
-export type QuickLinkDraft = {
+export type ShortcutDraft = {
   id: string | null;
   folderId: string | null;
   title: string;
@@ -12,14 +12,14 @@ export type QuickLinkDraft = {
   brandIconId: BrandIconId | null;
 };
 
-export type FolderDraft = {
-  id: string | null;
+export type FolderEditDraft = {
+  id: string;
   title: string;
   iconLabel: string;
   iconBackground: string;
 };
 
-export const emptyQuickLinkDraft: QuickLinkDraft = {
+export const emptyShortcutDraft: ShortcutDraft = {
   id: null,
   folderId: null,
   title: "",
@@ -29,11 +29,4 @@ export const emptyQuickLinkDraft: QuickLinkDraft = {
   iconImageDataUrl: null,
   iconMediaId: null,
   brandIconId: null
-};
-
-export const emptyFolderDraft: FolderDraft = {
-  id: null,
-  title: "",
-  iconLabel: "",
-  iconBackground: "#64748b"
 };

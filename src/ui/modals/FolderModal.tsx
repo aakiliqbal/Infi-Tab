@@ -1,10 +1,10 @@
 import type { FormEvent } from "react";
 import { Folder as FolderIcon } from "lucide-react";
-import { type FolderDraft } from "../model/drafts";
+import { type FolderEditDraft } from "../model/drafts";
 
 type FolderModalProps = {
-  draft: FolderDraft;
-  onChangeDraft: (draft: FolderDraft) => void;
+  draft: FolderEditDraft;
+  onChangeDraft: (draft: FolderEditDraft) => void;
   onClose: () => void;
   onDelete: () => void;
   onSave: (event: FormEvent<HTMLFormElement>) => void;
@@ -23,7 +23,7 @@ export function FolderModal({ draft, onChangeDraft, onClose, onDelete, onSave }:
     >
       <section className="quick-link-modal" role="dialog" aria-modal="true" aria-labelledby="folder-title">
         <div className="modal-header">
-          <h1 id="folder-title">{draft.id ? "Edit folder" : "Add folder"}</h1>
+          <h1 id="folder-title">Edit folder</h1>
           <button className="modal-close" type="button" onClick={onClose} aria-label="Close">
             x
           </button>
@@ -63,11 +63,9 @@ export function FolderModal({ draft, onChangeDraft, onClose, onDelete, onSave }:
           </div>
 
           <div className="modal-actions">
-            {draft.id ? (
-              <button className="danger-button" type="button" onClick={onDelete}>
-                Delete
-              </button>
-            ) : null}
+            <button className="danger-button" type="button" onClick={onDelete}>
+              Delete
+            </button>
             <button className="secondary-button" type="button" onClick={onClose}>
               Cancel
             </button>

@@ -1,34 +1,19 @@
-import { defaultTabState, normalizeGridLayout, normalizeTopLevelTiles, type TabState } from "../domain/tabState";
+import { defaultTabState, migrateLegacyTabState, normalizeTabState, type LegacyTabState, type TabState } from "../domain/tabState";
 import { materializeTabStateMedia, stripResolvedMediaFromTabState } from "./mediaStorage";
 
 const storageKey = "infiTabState";
 
 export async function loadTabState(): Promise<TabState> {
-  const stored = await storageGet<Partial<TabState>>(storageKey);
+  const stored = await storageGet<Partial<TabState> | Partial<LegacyTabState>>(storageKey);
 
-  if (!stored || stored.schemaVersion !== defaultTabState.schemaVersion) {
+  if (!stored) {
     return saveTabState(defaultTabState);
   }
 
-  const quickLinks = stored.quickLinks ?? defaultTabState.quickLinks;
-  const folders = stored.folders ?? defaultTabState.folders;
-
-  const nextState = {
-    ...defaultTabState,
-    ...stored,
-    quickLinks,
-    folders,
-    topLevelTiles: normalizeTopLevelTiles(stored.topLevelTiles, quickLinks, folders),
-    wallpaper: {
-      ...defaultTabState.wallpaper,
-      ...(stored.wallpaper ?? {})
-    },
-    layout: {
-      ...defaultTabState.layout,
-      ...(stored.layout ?? {}),
-      gridLayout: normalizeGridLayout(stored.layout?.gridLayout, stored.layout)
-    }
-  };
+  const nextState =
+    stored.schemaVersion === defaultTabState.schemaVersion
+      ? normalizeTabState(stored as Partial<TabState>)
+      : migrateLegacyTabState(stored as Partial<LegacyTabState>);
 
   const hydratedState = await materializeTabStateMedia(nextState);
   await storageSet(storageKey, stripResolvedMediaFromTabState(hydratedState));

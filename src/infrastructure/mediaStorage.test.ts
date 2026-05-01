@@ -5,6 +5,10 @@ import { materializeTabStateMedia, stripResolvedMediaFromTabState } from "./medi
 describe("mediaStorage", () => {
   it("stores and reloads wallpaper and shortcut GIFs through media ids", async () => {
     const dataUrl = "data:image/gif;base64,R0lGODlhAQABAPAAAAAAAAAAACH5BAEAAAAALAAAAAABAAEAAAICRAEAOw==";
+    const shortcut = defaultTabState.tiles.docs;
+    if (shortcut.kind !== "shortcut") {
+      throw new Error("Expected docs to be a shortcut");
+    }
     const state = {
       ...defaultTabState,
       wallpaper: {
@@ -13,36 +17,42 @@ describe("mediaStorage", () => {
         value: dataUrl,
         mediaId: null
       },
-      quickLinks: [
-        {
-          ...defaultTabState.quickLinks[0],
+      tiles: {
+        ...defaultTabState.tiles,
+        docs: {
+          ...shortcut,
           icon: {
-            ...defaultTabState.quickLinks[0].icon,
+            ...shortcut.icon,
             type: "image" as const,
             imageDataUrl: dataUrl,
             imageMediaId: null
           }
         }
-      ]
+      }
     };
 
     const hydrated = await materializeTabStateMedia(state);
 
     expect(hydrated.wallpaper.mediaId).toBeTruthy();
-    expect(hydrated.quickLinks[0].icon.imageMediaId).toBeTruthy();
+    expect(hydrated.tiles.docs.kind).toBe("shortcut");
+    expect(hydrated.tiles.docs.kind === "shortcut" ? hydrated.tiles.docs.icon.imageMediaId : null).toBeTruthy();
 
     const stripped = stripResolvedMediaFromTabState(hydrated);
     expect(stripped.wallpaper.value).toBeNull();
-    expect(stripped.quickLinks[0].icon.imageDataUrl).toBeNull();
+    expect(stripped.tiles.docs.kind === "shortcut" ? stripped.tiles.docs.icon.imageDataUrl : "not-shortcut").toBeNull();
 
     const rehydrated = await materializeTabStateMedia(stripped);
 
     expect(rehydrated.wallpaper.value).toBe(dataUrl);
-    expect(rehydrated.quickLinks[0].icon.imageDataUrl).toBe(dataUrl);
+    expect(rehydrated.tiles.docs.kind === "shortcut" ? rehydrated.tiles.docs.icon.imageDataUrl : null).toBe(dataUrl);
   });
 
   it("preserves backup media ids while restoring media payloads", async () => {
     const dataUrl = "data:image/gif;base64,R0lGODlhAQABAPAAAAAAAAAAACH5BAEAAAAALAAAAAABAAEAAAICRAEAOw==";
+    const shortcut = defaultTabState.tiles.docs;
+    if (shortcut.kind !== "shortcut") {
+      throw new Error("Expected docs to be a shortcut");
+    }
     const state = {
       ...defaultTabState,
       wallpaper: {
@@ -51,30 +61,31 @@ describe("mediaStorage", () => {
         value: dataUrl,
         mediaId: "wallpaper-id"
       },
-      quickLinks: [
-        {
-          ...defaultTabState.quickLinks[0],
+      tiles: {
+        ...defaultTabState.tiles,
+        docs: {
+          ...shortcut,
           icon: {
-            ...defaultTabState.quickLinks[0].icon,
+            ...shortcut.icon,
             type: "image" as const,
             imageDataUrl: dataUrl,
             imageMediaId: "icon-id"
           }
         }
-      ]
+      }
     };
 
     const hydrated = await materializeTabStateMedia(state);
 
     expect(hydrated.wallpaper.mediaId).toBe("wallpaper-id");
-    expect(hydrated.quickLinks[0].icon.imageMediaId).toBe("icon-id");
+    expect(hydrated.tiles.docs.kind === "shortcut" ? hydrated.tiles.docs.icon.imageMediaId : null).toBe("icon-id");
 
     const stripped = stripResolvedMediaFromTabState(hydrated);
     const rehydrated = await materializeTabStateMedia(stripped);
 
     expect(rehydrated.wallpaper.mediaId).toBe("wallpaper-id");
-    expect(rehydrated.quickLinks[0].icon.imageMediaId).toBe("icon-id");
+    expect(rehydrated.tiles.docs.kind === "shortcut" ? rehydrated.tiles.docs.icon.imageMediaId : null).toBe("icon-id");
     expect(rehydrated.wallpaper.value).toBe(dataUrl);
-    expect(rehydrated.quickLinks[0].icon.imageDataUrl).toBe(dataUrl);
+    expect(rehydrated.tiles.docs.kind === "shortcut" ? rehydrated.tiles.docs.icon.imageDataUrl : null).toBe(dataUrl);
   });
 });

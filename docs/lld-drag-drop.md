@@ -1,0 +1,226 @@
+# Low-Level Design: Drag and Drop
+
+## Overview
+
+Drag-and-drop in Infi Tab uses native HTML drag events with a custom pointer-following overlay. The domain layer provides `DropAction` types and `resolveDrop()` decision logic.
+
+## Current Architecture
+
+```
+ShortcutGrid.tsx (UI Layer)
+  ├── dragState: source tracking
+  ├── dropTargetKey: current target
+  ├── dropPosition: left/center/right
+  ├── moveTimerRef: zone debounce
+  └── dragOverlay: pointer follow
+          │
+          ▼ Dispatch DropAction
+useTabStore (State Layer)
+          │
+          ▼ applyDropAction()
+dropActions.ts (Domain Layer)
+  ├── REORDER
+  ├── COMBINE
+  ├── ADD_TO_FOLDER
+  ├── CROSS_PAGE
+  ├── PROMOTE
+  └── CANCEL
+```
+
+## Key Files
+
+| File | Responsibility |
+|------|-------------|
+| `src/ui/ShortcutGrid.tsx` | UI session, native drag events |
+| `src/domain/dropActions.ts` | Domain logic, reducer |
+| `src/stores/useTabStore.ts` | State persistence |
+
+## UI Session State
+
+Located in `ShortcutGrid.tsx`:
+
+```typescript
+type DragState = {
+  sourcePageIndex: number;  // Page being dragged from
+  sourceIndex: number;    // Index on that page
+  sourceKey: string;     // Tile key (prefixed)
+};
+
+type DropPosition = "left" | "center" | "right";
+```
+
+## Hit Zones
+
+```
+┌─────────────────────────────────────────────┐
+│  left (30%)   │ center (40%) │  right (30%) │
+│   leading     │    center    │   trailing   │
+│   insert      │   combine    │    insert    │
+└─────────────────────────────────────────────┘
+```
+
+- Left 30%: Leading insert (before target)
+- Center 40%: Combine (shortcut → folder) or add to folder
+- Right 30%: Trailing insert (after target)
+
+## Zone Confirmation Timer
+
+Used to prevent accidental combines:
+
+```typescript
+const ZONE_DEBOUNCE_MS = 200;
+
+moveTimerRef = useRef<ReturnType<typeof setTimeout>>(null);
+pendingZone = useState<DropPosition | null>(null);
+confirmedZone = useState<DropPosition | null>(null);
+```
+
+Flow:
+1. User drags over tile
+2. `handleZoneChange()` called with new zone
+3. `pendingZone` set to new zone
+4. 200ms timer starts
+5. If still over same zone, `confirmedZone` set
+6. Timer cleared on zone change or leave
+
+## Drop Action Decisions
+
+Current logic in `handleDrop()`:
+
+| Condition | Action |
+|----------|--------|
+| source=shortcut, target=shortcut, position=center | COMBINE |
+| source=shortcut, target=folder, position=center | ADD_TO_FOLDER |
+| position=left | REORDER (before) |
+| position=right | REORDER (after) |
+
+Note: This bypasses `resolveDrop()` - see issue #2.
+
+## Drag Overlay
+
+Custom pointer-following tile:
+
+```typescript
+const [dragOverlay, setDragOverlay] = useState<{
+  tile: ResolvedTopLevelTile;
+  x: number;
+  y: number;
+} | null>(null);
+```
+
+- Renders same tile content as source
+- Positioned with `fixed`, `pointerEvents: none`
+- Coordinates updated via `window.addEventListener('dragover')`
+
+## Live Shift Animation
+
+FLIP-like animation for placeholder positions:
+
+```typescript
+function getTileShift(tileKey: string): number {
+  // Returns -1, 0, or 1 based on
+  // source/target positions and active zone
+}
+```
+
+- Tiles between source and target shift by one slot
+- Uses `transform: translateX()` with 100ms transition
+- Disabled when `prefers-reduced-motion: reduce`
+
+## Drop Action Flow
+
+```
+1. onDragStart
+   └─ Set dragState, dragOverlay
+       Hide default drag image
+
+2. onDragOver (section level)
+   └─ elementsFromPoint() to find target tile
+       getDropPosition() to compute zone
+       handleZoneChange() to debounce
+
+3. onDrop (section level)
+   └─ Use confirmedZone or dropPosition
+       Build DropAction from condition tree
+       dispatchDropAction() to store
+
+4. onDragEnd
+   └─ Clear all state
+       Remove overlay
+```
+
+## Domain Interface
+
+### DropAction Types
+
+```typescript
+type DropAction =
+  | { type: "REORDER"; tileId: TileId; targetPageId: string; toIndex: number }
+  | { type: "COMBINE"; sourceTileId: TileId; targetTileId: TileId; targetPageId: string; folderId?: TileId }
+  | { type: "ADD_TO_FOLDER"; sourceTileId: TileId; folderId: TileId; atIndex?: number }
+  | { type: "CROSS_PAGE"; tileId: TileId; fromPageId: string; toPageId: string; toIndex: number }
+  | { type: "PROMOTE"; tileId: TileId; fromFolderId: TileId; toPageId: string; toIndex: number }
+  | { type: "CANCEL" };
+```
+
+### resolveDrop()
+
+Pure function for decision logic:
+
+```typescript
+function resolveDrop(state: TabState, input: ResolveDropInput): DropAction
+```
+
+Input shape:
+```typescript
+type ResolveDropInput = {
+  activeId: TileId;
+  overId: TileId | "surface" | null;
+  overZone: DropZone | null;  // "leading" | "center" | "trailing"
+  sourcePageId: string;
+  sourceFolderId?: TileId;
+  previewPageId?: string;
+  toIndex?: number;
+};
+```
+
+## Pending Issues
+
+1. **Extract hook**: Drag state lives in ShortcutGrid
+2. **Route through resolveDrop()**: Currently bypasses domain function
+3. **Cross-page**: Domain exists, UI not wired
+4. **Folder child**: Domain exists, UI not wired
+5. **Keyboard drag**: Not implemented
+6. **Touch drag**: Not verified
+
+## CSS Classes
+
+| Class | Purpose |
+|-------|--------|
+| `.dragging-origin` | Source tile (dragSource) |
+| `.drop-leading` | Target with leading insert |
+| `.drop-center` | Target for combine/add |
+| `.drop-trailing` | Target with trailing insert |
+| `.combine-preview` | Center drop preview on shortcuts |
+| `.drag-overlay-tile` | Pointer-following overlay |
+
+## Debug Logging
+
+Current console marks (should be removed):
+
+```typescript
+console.log('[DEBUG] handleDragOver: tileKey=', tileKey, 'position=', position);
+console.log('[DEBUG] handleDrop: targetKey=', targetKey, 'dragState=', dragState);
+console.log('[DEBUG] REORDER: baseKeys=', baseKeys, 'sourceKey=', dragState.sourceKey);
+console.log('[DEBUG] tileShift: tileKey=', tile.key, 'shift=', shift);
+```
+
+## Test Coverage
+
+Domain tests: `src/domain/dropActions.test.ts`
+- `applyDropAction` for each action type
+- `resolveDrop` decision table
+- Folder cleanup logic
+- Page compaction
+
+Missing: UI-level testing of drag flows

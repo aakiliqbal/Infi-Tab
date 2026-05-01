@@ -7,76 +7,107 @@ import {
 import { defaultTabState } from "./tabState";
 
 describe("parseTabStateBackup", () => {
-  it("migrates older backups missing optional fields and tile order", () => {
+  it("normalizes v2 backups missing optional media settings", () => {
     const backup = {
-      schemaVersion: 1,
-      searchProvider: defaultTabState.searchProvider,
-      layout: {
-        ...defaultTabState.layout,
-        gridLayout: {
-          mode: "preset",
-          presetId: "2x6",
-          rows: 2,
-          columns: 6,
-          columnSpacing: 100,
-          lineSpacing: 100,
-          iconSize: 100
-        }
-      },
+      ...defaultTabState,
       wallpaper: {
         type: "dataUrl",
         value: "data:image/png;base64,abc"
-      },
-      quickLinks: defaultTabState.quickLinks.slice(0, 1),
-      folders: defaultTabState.folders.slice(0, 1)
+      }
     };
 
     const parsed = parseTabStateBackup(backup);
 
+    expect(parsed.schemaVersion).toBe(2);
     expect(parsed.wallpaper.dim).toBe(40);
     expect(parsed.wallpaper.blur).toBe(0);
-    expect(parsed.layout.gridLayout.rows).toBe(2);
-    expect(parsed.layout.gridLayout.columns).toBe(6);
-    expect(parsed.topLevelTiles).toEqual([
-      { type: "shortcut", id: defaultTabState.quickLinks[0].id },
-      { type: "folder", id: defaultTabState.folders[0].id }
-    ]);
+    expect(parsed.pages[0].tileIds).toContain("docs");
   });
 
-  it("keeps media payload references in portable backup state", () => {
+  it("rejects v1 backups with a legacy schema error", () => {
     const backup = {
       schemaVersion: 1,
       searchProvider: defaultTabState.searchProvider,
       layout: defaultTabState.layout,
+      wallpaper: defaultTabState.wallpaper,
+      quickLinks: [
+        {
+          kind: "shortcut",
+          id: "docs",
+          title: "Docs",
+          url: "https://docs.google.com",
+          icon: {
+            type: "fallback",
+            label: "D",
+            background: "#4285f4"
+          }
+        }
+      ],
+      folders: [
+        {
+          id: "work-folder",
+          title: "Work",
+          icon: {
+            type: "fallback",
+            label: "W",
+            background: "#64748b"
+          },
+          quickLinks: [
+            {
+              id: "work-notion",
+              title: "Notion",
+              url: "https://notion.so",
+              icon: {
+                type: "fallback",
+                label: "N",
+                background: "#111827"
+              }
+            }
+          ]
+        }
+      ]
+    };
+
+    expect(() => parseTabStateBackup(backup)).toThrow("Legacy backup schema");
+  });
+
+  it("keeps media payload references in portable backup state", () => {
+    const shortcut = defaultTabState.tiles.docs;
+    if (shortcut.kind !== "shortcut") {
+      throw new Error("Expected docs to be a shortcut");
+    }
+
+    const backup = {
+      ...defaultTabState,
       wallpaper: {
         ...defaultTabState.wallpaper,
-        type: "dataUrl",
+        type: "dataUrl" as const,
         value: "data:image/gif;base64,R0lGODlhAQABAPAAAAAAAAAAACH5BAEAAAAALAAAAAABAAEAAAICRAEAOw==",
         mediaId: "wallpaper-id"
       },
-      quickLinks: [
-        {
-          ...defaultTabState.quickLinks[0],
+      tiles: {
+        ...defaultTabState.tiles,
+        docs: {
+          ...shortcut,
           icon: {
-            ...defaultTabState.quickLinks[0].icon,
-            type: "image",
+            ...shortcut.icon,
+            type: "image" as const,
             imageDataUrl: "data:image/gif;base64,R0lGODlhAQABAPAAAAAAAAAAACH5BAEAAAAALAAAAAABAAEAAAICRAEAOw==",
             imageMediaId: "icon-id"
           }
         }
-      ],
-      folders: defaultTabState.folders.slice(0, 1)
+      }
     };
 
     const parsed = parseTabStateBackup(backup);
 
     expect(parsed.wallpaper.mediaId).toBe("wallpaper-id");
-    expect(parsed.quickLinks[0].icon.imageMediaId).toBe("icon-id");
+    expect(parsed.tiles.docs.kind === "shortcut" ? parsed.tiles.docs.icon.imageMediaId : null).toBe("icon-id");
   });
 
   it("rejects invalid shapes", () => {
     expect(() => parseTabStateBackup(null)).toThrow("Unsupported backup schema");
-    expect(() => parseTabStateBackup({ schemaVersion: 1 })).toThrow("Invalid backup shape");
+    expect(() => parseTabStateBackup({ schemaVersion: 2 })).toThrow("Invalid backup shape");
   });
 
   it("describes what the import will replace", () => {
@@ -90,6 +121,9 @@ describe("parseTabStateBackup", () => {
     );
     expect(getBackupImportErrorMessage(new Error("Unsupported backup schema"))).toBe(
       "This backup uses an unsupported schema version."
+    );
+    expect(getBackupImportErrorMessage(new Error("Legacy backup schema"))).toBe(
+      "This backup uses the old v1 format. Export a new backup after opening the latest version of Infi Tab."
     );
     expect(getBackupImportErrorMessage(new Error("Invalid backup shape"))).toBe(
       "This backup file is missing required fields."

@@ -3,6 +3,7 @@
 type ChromeStorageArea = {
   get: (keys: string[], callback: (items: Record<string, unknown>) => void) => void;
   set: (items: Record<string, unknown>, callback?: () => void) => void;
+  remove?: (keys: string[], callback?: () => void) => void;
 };
 
 declare const chrome:

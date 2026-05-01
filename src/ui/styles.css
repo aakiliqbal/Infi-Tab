@@ -601,6 +601,10 @@ input {
   .quick-link-grid {
     animation: none;
   }
+
+  .quick-link.drop-center .quick-link-icon {
+    animation: none;
+  }
 }
 
 .quick-link {
@@ -621,19 +625,104 @@ input {
     transform 140ms ease;
 }
 
-.quick-link[draggable="true"] {
-  cursor: grab;
+.quick-link::before {
+  content: "";
+  position: absolute;
+  top: calc(var(--icon-size) * 0.12);
+  width: 3px;
+  height: calc(var(--icon-size) * 0.76);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.82);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 120ms ease;
 }
 
-.quick-link.dragging {
-  cursor: grabbing;
-  opacity: 0.46;
-  transform: scale(0.94);
+.quick-link.dragging-origin {
+  opacity: 0 !important;
+  pointer-events: none;
 }
 
 .quick-link.drag-over .quick-link-icon {
   outline: 3px solid rgba(255, 255, 255, 0.88);
   outline-offset: 7px;
+}
+
+.quick-link.drop-center .quick-link-icon {
+  transform: scale(0.92);
+  animation: combine-pulse 700ms ease-in-out infinite;
+  box-shadow: 0 0 20px rgba(99, 102, 241, 0.6);
+}
+
+@keyframes combine-pulse {
+  0%, 100% {
+    transform: scale(0.92);
+    box-shadow: 0 0 20px rgba(99, 102, 241, 0.6);
+  }
+  50% {
+    transform: scale(1.0);
+    box-shadow: 0 0 30px rgba(99, 102, 241, 0.8);
+  }
+}
+
+.quick-link.drop-leading .quick-link-icon {
+  box-shadow: 0 18px 34px rgba(0, 0, 0, 0.24);
+}
+
+.quick-link.drop-trailing .quick-link-icon {
+  box-shadow: 0 18px 34px rgba(0, 0, 0, 0.24);
+}
+
+.quick-link.drop-leading::before,
+.quick-link.drop-trailing::before {
+  opacity: 1;
+}
+
+.quick-link.drop-leading::before {
+  left: calc(50% - var(--icon-size) / 2 - 10px);
+}
+
+.quick-link.drop-trailing::before {
+  right: calc(50% - var(--icon-size) / 2 - 10px);
+}
+
+.quick-link.combine-preview .quick-link-icon {
+  transform: scale(0.85);
+  box-shadow: 0 0 15px rgba(99, 102, 241, 0.5);
+}
+
+.drag-overlay-tile {
+  display: grid;
+  justify-items: center;
+  gap: var(--quick-link-tile-gap);
+  color: #ffffff;
+  text-align: center;
+  text-decoration: none;
+  pointer-events: none;
+  position: relative;
+  filter: drop-shadow(0 12px 24px rgba(0, 0, 0, 0.4));
+  z-index: 50;
+  transition: transform 140ms ease;
+}
+
+.drag-overlay-tile.merge-active .quick-link-icon {
+  transform: scale(0.85);
+}
+
+.drag-overlay-merge {
+  position: absolute;
+  top: -8px;
+  right: -8px;
+  display: grid;
+  width: 30px;
+  height: 30px;
+  place-items: center;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.94);
+  color: #1f2937;
+  font-size: 22px;
+  font-weight: 900;
+  line-height: 1;
 }
 
 .quick-link-icon {
@@ -761,6 +850,39 @@ input {
   place-items: center;
   padding: 24px;
   background: rgba(7, 12, 13, 0.68);
+}
+
+.folder-backdrop.folder-drop-target {
+  background: rgba(7, 12, 13, 0.58);
+}
+
+/* Cross-folder drag target: same combine-pulse as .drop-center */
+.quick-link.cross-folder-target .quick-link-icon {
+  animation: combine-pulse 700ms ease-in-out infinite;
+  box-shadow: 0 0 20px rgba(99, 102, 241, 0.6);
+  transform: scale(0.92);
+}
+
+/* Drop indicators inside the folder panel use a visible blue line (white panel background) */
+.folder-grid .quick-link.drop-leading::before,
+.folder-grid .quick-link.drop-trailing::before {
+  background: rgba(37, 99, 235, 0.75);
+}
+
+.folder-backdrop.folder-drop-target::after {
+  content: "Drop outside the folder to move shortcut to this page";
+  position: fixed;
+  right: 24px;
+  bottom: 24px;
+  max-width: min(320px, calc(100vw - 48px));
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.92);
+  box-shadow: 0 18px 44px rgba(0, 0, 0, 0.28);
+  color: #1f2937;
+  font-size: 13px;
+  font-weight: 750;
+  padding: 10px 14px;
+  pointer-events: none;
 }
 
 .folder-panel {

@@ -1,4 +1,4 @@
-import type { TabState } from "../domain/tabState";
+import type { Shortcut, TabState, Tile } from "../domain/tabState";
 
 type MediaRecord = {
   id: string;
@@ -37,19 +37,12 @@ export async function deleteMediaDataUrl(id: string): Promise<void> {
 
 export async function materializeTabStateMedia(state: TabState): Promise<TabState> {
   const wallpaper = await materializeWallpaper(state.wallpaper);
-  const quickLinks = await materializeQuickLinks(state.quickLinks);
-  const folders = await Promise.all(
-    state.folders.map(async (folder) => ({
-      ...folder,
-      quickLinks: await materializeQuickLinks(folder.quickLinks)
-    }))
-  );
+  const tiles = await materializeTiles(state.tiles);
 
   return {
     ...state,
     wallpaper,
-    quickLinks,
-    folders
+    tiles
   };
 }
 
@@ -60,11 +53,7 @@ export function stripResolvedMediaFromTabState(state: TabState): TabState {
       ...state.wallpaper,
       value: null
     },
-    quickLinks: stripQuickLinks(state.quickLinks),
-    folders: state.folders.map((folder) => ({
-      ...folder,
-      quickLinks: stripQuickLinks(folder.quickLinks)
-    }))
+    tiles: stripTiles(state.tiles)
   };
 }
 
@@ -91,13 +80,13 @@ async function materializeWallpaper(stateWallpaper: TabState["wallpaper"]): Prom
   };
 }
 
-async function materializeQuickLinkIcon(quickLink: TabState["quickLinks"][number]): Promise<TabState["quickLinks"][number]> {
-  if (quickLink.icon.type !== "image") {
-    return quickLink;
+async function materializeShortcutIcon(shortcut: Shortcut): Promise<Shortcut> {
+  if (shortcut.icon.type !== "image") {
+    return shortcut;
   }
 
-  let imageMediaId = quickLink.icon.imageMediaId ?? null;
-  let imageDataUrl = quickLink.icon.imageDataUrl ?? null;
+  let imageMediaId = shortcut.icon.imageMediaId ?? null;
+  let imageDataUrl = shortcut.icon.imageDataUrl ?? null;
 
   if (imageDataUrl) {
     imageMediaId = await storeMediaDataUrl(imageDataUrl, "icon", imageMediaId);
@@ -108,27 +97,39 @@ async function materializeQuickLinkIcon(quickLink: TabState["quickLinks"][number
   }
 
   return {
-    ...quickLink,
+    ...shortcut,
     icon: {
-      ...quickLink.icon,
+      ...shortcut.icon,
       imageMediaId,
       imageDataUrl
     }
   };
 }
 
-async function materializeQuickLinks(quickLinks: TabState["quickLinks"]): Promise<TabState["quickLinks"]> {
-  return Promise.all(quickLinks.map((quickLink) => materializeQuickLinkIcon(quickLink)));
+async function materializeTiles(tiles: TabState["tiles"]): Promise<TabState["tiles"]> {
+  const entries = await Promise.all(
+    Object.entries(tiles).map(async ([id, tile]) => [id, tile.kind === "shortcut" ? await materializeShortcutIcon(tile) : tile] as const)
+  );
+
+  return Object.fromEntries(entries);
 }
 
-function stripQuickLinks(quickLinks: TabState["quickLinks"]): TabState["quickLinks"] {
-  return quickLinks.map((quickLink) => ({
-    ...quickLink,
+function stripTiles(tiles: TabState["tiles"]): TabState["tiles"] {
+  return Object.fromEntries(Object.entries(tiles).map(([id, tile]) => [id, stripTile(tile)]));
+}
+
+function stripTile(tile: Tile): Tile {
+  if (tile.kind !== "shortcut") {
+    return tile;
+  }
+
+  return {
+    ...tile,
     icon: {
-      ...quickLink.icon,
+      ...tile.icon,
       imageDataUrl: null
     }
-  }));
+  };
 }
 
 async function putMediaRecord(record: MediaRecord) {

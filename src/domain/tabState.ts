@@ -2,34 +2,42 @@ import type { BrandIconId } from "./brandIcons";
 
 export type SearchProviderId = "google" | "bing" | "yahoo" | "yandex" | "duckduckgo";
 
-export type QuickLink = {
-  id: string;
+export type TileId = string;
+
+export type ShortcutIcon = {
+  type: "fallback" | "image" | "brand";
+  label: string;
+  background: string;
+  imageDataUrl?: string | null;
+  imageMediaId?: string | null;
+  brandIconId?: BrandIconId | null;
+};
+
+export type Shortcut = {
+  kind: "shortcut";
+  id: TileId;
   title: string;
   url: string;
-  icon: {
-    type: "fallback" | "image" | "brand";
-    label: string;
-    background: string;
-    imageDataUrl?: string | null;
-    imageMediaId?: string | null;
-    brandIconId?: BrandIconId | null;
-  };
+  icon: ShortcutIcon;
 };
 
 export type Folder = {
-  id: string;
+  kind: "folder";
+  id: TileId;
   title: string;
   icon: {
     type: "fallback";
     label: string;
     background: string;
   };
-  quickLinks: QuickLink[];
+  childIds: TileId[];
 };
 
-export type TopLevelTile = {
-  type: "shortcut" | "folder";
+export type Tile = Shortcut | Folder;
+
+export type ShortcutPage = {
   id: string;
+  tileIds: TileId[];
 };
 
 export type GridLayoutPresetId = "2x4" | "2x5" | "2x6" | "2x7" | "3x3";
@@ -60,7 +68,7 @@ export type LayoutSettings = {
 };
 
 export type TabState = {
-  schemaVersion: 1;
+  schemaVersion: 2;
   searchProvider: SearchProviderId;
   layout: LayoutSettings;
   wallpaper: {
@@ -70,9 +78,27 @@ export type TabState = {
     dim: number;
     blur: number;
   };
-  quickLinks: QuickLink[];
-  folders: Folder[];
-  topLevelTiles: TopLevelTile[];
+  tiles: Record<TileId, Tile>;
+  pages: ShortcutPage[];
+};
+
+type LegacyShortcut = Omit<Shortcut, "kind"> & { kind?: "shortcut" };
+
+type LegacyFolder = Omit<Folder, "kind" | "childIds"> & {
+  kind?: "folder";
+  quickLinks: LegacyShortcut[];
+};
+
+type LegacyTopLevelTile = {
+  type: "shortcut" | "folder";
+  id: string;
+};
+
+export type LegacyTabState = Omit<TabState, "schemaVersion" | "tiles" | "pages"> & {
+  schemaVersion: 1;
+  quickLinks: LegacyShortcut[];
+  folders: LegacyFolder[];
+  topLevelTiles?: LegacyTopLevelTile[];
 };
 
 export const searchProviders: Record<SearchProviderId, { label: string; url: string }> = {
@@ -106,135 +132,242 @@ export const gridLayoutPresets: Record<GridLayoutPresetId, { label: string; rows
   "3x3": { label: "3x3", rows: 3, columns: 3 }
 };
 
-export const defaultTabState: TabState = {
-  schemaVersion: 1,
-  searchProvider: "google",
-  layout: {
-    iconSize: 86,
-    gridGap: 34,
+const defaultLayout: LayoutSettings = {
+  iconSize: 86,
+  gridGap: 34,
+  columns: 6,
+  showLabels: true,
+  searchPosition: "top",
+  hideSearchBox: false,
+  hideSearchCategory: false,
+  hideSearchButton: false,
+  searchBoxSize: 100,
+  searchBoxRadius: 100,
+  searchBoxOpacity: 96,
+  gridLayout: {
+    mode: "preset",
+    presetId: "2x6",
+    rows: 2,
     columns: 6,
-    showLabels: true,
-    searchPosition: "top",
-    hideSearchBox: false,
-    hideSearchCategory: false,
-    hideSearchButton: false,
-    searchBoxSize: 100,
-    searchBoxRadius: 100,
-    searchBoxOpacity: 96,
-    gridLayout: {
-      mode: "preset",
-      presetId: "2x6",
-      rows: 2,
-      columns: 6,
-      columnSpacing: 100,
-      lineSpacing: 100,
-      iconSize: 100
-    }
+    columnSpacing: 100,
+    lineSpacing: 100,
+    iconSize: 100
+  }
+};
+
+const defaultWallpaper: TabState["wallpaper"] = {
+  type: "none",
+  value: null,
+  mediaId: null,
+  dim: 40,
+  blur: 0
+};
+
+const defaultShortcutTiles = [
+  createShortcut("docs", "Docs", "https://docs.google.com", "#4285f4", "googleDocs"),
+  createShortcut("mail", "Gmail", "https://mail.google.com", "#ea4335", "gmail"),
+  createShortcut("github", "GitHub", "https://github.com", "#181717", "github"),
+  createShortcut("youtube", "YouTube", "https://youtube.com", "#ff0000", "youtube"),
+  createShortcut("calendar", "Calendar", "https://calendar.google.com", "#4285f4", "googleCalendar"),
+  createShortcut("drive", "Drive", "https://drive.google.com", "#4285f4", "googleDrive"),
+  createShortcut("x", "X", "https://x.com", "#000000", "x"),
+  createShortcut("spotify", "Spotify", "https://spotify.com", "#1db954", "spotify"),
+  createShortcut("netflix", "Netflix", "https://netflix.com", "#e50914", "netflix"),
+  createShortcut("instagram", "Instagram", "https://instagram.com", "#e4405f", "instagram"),
+  createShortcut("facebook", "Facebook", "https://facebook.com", "#0866ff", "facebook"),
+  createShortcut("chrome", "Chrome", "https://chrome.google.com/webstore", "#4285f4", "googleChrome"),
+  createShortcut("work-notion", "Notion", "https://notion.so", "#111827", "notion"),
+  createShortcut("work-reddit", "Reddit", "https://reddit.com", "#ff4500", "reddit")
+];
+
+const defaultFolder: Folder = {
+  kind: "folder",
+  id: "work-folder",
+  title: "Work",
+  icon: {
+    type: "fallback",
+    label: "W",
+    background: "#64748b"
   },
-  wallpaper: {
-    type: "none",
-    value: null,
-    mediaId: null,
-    dim: 40,
-    blur: 0
-  },
-  folders: [
+  childIds: ["work-notion", "work-reddit"]
+};
+
+export const defaultTabState: TabState = {
+  schemaVersion: 2,
+  searchProvider: "google",
+  layout: defaultLayout,
+  wallpaper: defaultWallpaper,
+  tiles: Object.fromEntries([...defaultShortcutTiles, defaultFolder].map((tile) => [tile.id, tile])),
+  pages: [
     {
-      id: "work-folder",
-      title: "Work",
-      icon: {
-        type: "fallback",
-        label: "W",
-        background: "#64748b"
-      },
-      quickLinks: [
-        createQuickLink("work-notion", "Notion", "https://notion.so", "#111827", "notion"),
-        createQuickLink("work-reddit", "Reddit", "https://reddit.com", "#ff4500", "reddit")
+      id: "page-1",
+      tileIds: [
+        "docs",
+        "mail",
+        "github",
+        "youtube",
+        "calendar",
+        "drive",
+        "x",
+        "spotify",
+        "netflix",
+        "instagram",
+        "facebook",
+        "chrome",
+        "work-folder"
       ]
     }
-  ],
-  quickLinks: [
-    createQuickLink("docs", "Docs", "https://docs.google.com", "#4285f4", "googleDocs"),
-    createQuickLink("mail", "Gmail", "https://mail.google.com", "#ea4335", "gmail"),
-    createQuickLink("github", "GitHub", "https://github.com", "#181717", "github"),
-    createQuickLink("youtube", "YouTube", "https://youtube.com", "#ff0000", "youtube"),
-    createQuickLink("calendar", "Calendar", "https://calendar.google.com", "#4285f4", "googleCalendar"),
-    createQuickLink("drive", "Drive", "https://drive.google.com", "#4285f4", "googleDrive"),
-    createQuickLink("x", "X", "https://x.com", "#000000", "x"),
-    createQuickLink("spotify", "Spotify", "https://spotify.com", "#1db954", "spotify"),
-    createQuickLink("netflix", "Netflix", "https://netflix.com", "#e50914", "netflix"),
-    createQuickLink("instagram", "Instagram", "https://instagram.com", "#e4405f", "instagram"),
-    createQuickLink("facebook", "Facebook", "https://facebook.com", "#0866ff", "facebook"),
-    createQuickLink("chrome", "Chrome", "https://chrome.google.com/webstore", "#4285f4", "googleChrome")
-  ],
-  topLevelTiles: [
-    { type: "shortcut", id: "docs" },
-    { type: "shortcut", id: "mail" },
-    { type: "shortcut", id: "github" },
-    { type: "shortcut", id: "youtube" },
-    { type: "shortcut", id: "calendar" },
-    { type: "shortcut", id: "drive" },
-    { type: "shortcut", id: "x" },
-    { type: "shortcut", id: "spotify" },
-    { type: "shortcut", id: "netflix" },
-    { type: "shortcut", id: "instagram" },
-    { type: "shortcut", id: "facebook" },
-    { type: "shortcut", id: "chrome" },
-    { type: "folder", id: "work-folder" }
   ]
 };
 
-export function createTopLevelTileOrder(quickLinks: QuickLink[], folders: Folder[]): TopLevelTile[] {
-  return [
-    ...quickLinks.map((quickLink) => ({ type: "shortcut" as const, id: quickLink.id })),
-    ...folders.map((folder) => ({ type: "folder" as const, id: folder.id }))
-  ];
+export function createShortcut(
+  id: string,
+  title: string,
+  url: string,
+  background: string,
+  brandIconId?: BrandIconId
+): Shortcut {
+  return {
+    kind: "shortcut",
+    id,
+    title,
+    url,
+    icon: {
+      type: brandIconId ? "brand" : "fallback",
+      label: title.slice(0, 1).toUpperCase(),
+      background,
+      imageMediaId: null,
+      brandIconId: brandIconId ?? null
+    }
+  };
 }
 
-export function normalizeTopLevelTiles(
-  value: unknown,
-  quickLinks: QuickLink[],
-  folders: Folder[]
-): TopLevelTile[] {
-  const quickLinkIds = new Set(quickLinks.map((quickLink) => quickLink.id));
-  const folderIds = new Set(folders.map((folder) => folder.id));
-  const seen = new Set<string>();
-  const topLevelTiles: TopLevelTile[] = [];
+export function migrateLegacyTabState(value: Partial<LegacyTabState> | null | undefined): TabState {
+  if (!value) {
+    return defaultTabState;
+  }
+
+  const legacyShortcuts = Array.isArray(value.quickLinks) ? value.quickLinks : [];
+  const legacyFolders = Array.isArray(value.folders) ? value.folders : [];
+  const tiles: Record<TileId, Tile> = {};
+
+  for (const shortcut of legacyShortcuts) {
+    if (isLegacyShortcut(shortcut)) {
+      tiles[shortcut.id] = toShortcut(shortcut);
+    }
+  }
+
+  for (const folder of legacyFolders) {
+    if (!isLegacyFolder(folder)) {
+      continue;
+    }
+
+    const childIds: TileId[] = [];
+    for (const child of folder.quickLinks) {
+      if (!isLegacyShortcut(child)) {
+        continue;
+      }
+
+      const shortcut = toShortcut(child);
+      tiles[shortcut.id] = shortcut;
+      childIds.push(shortcut.id);
+    }
+
+    tiles[folder.id] = {
+      kind: "folder",
+      id: folder.id,
+      title: folder.title,
+      icon: folder.icon,
+      childIds
+    };
+  }
+
+  const tileIds = normalizeLegacyTopLevelTileIds(value.topLevelTiles, legacyShortcuts, legacyFolders, tiles);
+
+  return normalizeTabState({
+    ...defaultTabState,
+    ...value,
+    schemaVersion: 2,
+    layout: {
+      ...defaultTabState.layout,
+      ...(value.layout ?? {}),
+      gridLayout: normalizeGridLayout(value.layout?.gridLayout, value.layout)
+    },
+    wallpaper: {
+      ...defaultTabState.wallpaper,
+      ...(value.wallpaper ?? {})
+    },
+    tiles,
+    pages: [{ id: "page-1", tileIds }]
+  });
+}
+
+export function normalizeTabState(value: Partial<TabState>): TabState {
+  const tiles = isRecord(value.tiles) ? normalizeTiles(value.tiles) : defaultTabState.tiles;
+  const pages = normalizeShortcutPages(value.pages, tiles);
+
+  return {
+    ...defaultTabState,
+    ...value,
+    schemaVersion: 2,
+    searchProvider: isSearchProviderId(value.searchProvider) ? value.searchProvider : defaultTabState.searchProvider,
+    layout: {
+      ...defaultTabState.layout,
+      ...(value.layout ?? {}),
+      gridLayout: normalizeGridLayout(value.layout?.gridLayout, value.layout)
+    },
+    wallpaper: {
+      ...defaultTabState.wallpaper,
+      ...(value.wallpaper ?? {})
+    },
+    tiles,
+    pages
+  };
+}
+
+export function normalizeShortcutPages(value: unknown, tiles: Record<TileId, Tile>): ShortcutPage[] {
+  const topLevelTileIds = new Set(
+    Object.values(tiles)
+      .filter((tile) => !isFolderChild(tile.id, tiles))
+      .map((tile) => tile.id)
+  );
+  const seen = new Set<TileId>();
+  const pages: ShortcutPage[] = [];
 
   if (Array.isArray(value)) {
-    for (const tile of value) {
-      if (!isTopLevelTileLike(tile)) {
+    for (const [index, page] of value.entries()) {
+      if (!isRecord(page) || !Array.isArray(page.tileIds)) {
         continue;
       }
 
-      const key = `${tile.type}:${tile.id}`;
-      const exists = tile.type === "shortcut" ? quickLinkIds.has(tile.id) : folderIds.has(tile.id);
-      if (!exists || seen.has(key)) {
-        continue;
+      const tileIds = page.tileIds.filter((tileId): tileId is string => {
+        if (typeof tileId !== "string" || seen.has(tileId) || !topLevelTileIds.has(tileId)) {
+          return false;
+        }
+
+        seen.add(tileId);
+        return true;
+      });
+
+      pages.push({ id: typeof page.id === "string" ? page.id : `page-${index + 1}`, tileIds });
+    }
+  }
+
+  for (const tileId of topLevelTileIds) {
+    if (!seen.has(tileId)) {
+      if (pages.length === 0) {
+        pages.push({ id: "page-1", tileIds: [] });
       }
-
-      seen.add(key);
-      topLevelTiles.push({ type: tile.type, id: tile.id });
+      pages[pages.length - 1].tileIds.push(tileId);
     }
   }
 
-  for (const quickLink of quickLinks) {
-    const key = `shortcut:${quickLink.id}`;
-    if (!seen.has(key)) {
-      seen.add(key);
-      topLevelTiles.push({ type: "shortcut", id: quickLink.id });
-    }
-  }
+  return compactShortcutPages(pages);
+}
 
-  for (const folder of folders) {
-    const key = `folder:${folder.id}`;
-    if (!seen.has(key)) {
-      seen.add(key);
-      topLevelTiles.push({ type: "folder", id: folder.id });
-    }
-  }
-
-  return topLevelTiles;
+export function compactShortcutPages(pages: ShortcutPage[]): ShortcutPage[] {
+  const compacted = pages.filter((page) => page.tileIds.length > 0);
+  return compacted.length > 0 ? compacted : [{ id: "page-1", tileIds: [] }];
 }
 
 export function normalizeGridLayout(value: unknown, fallbackLayout?: Partial<LayoutSettings>): GridLayoutSettings {
@@ -280,15 +413,114 @@ export function normalizeGridLayout(value: unknown, fallbackLayout?: Partial<Lay
   };
 }
 
-function isTopLevelTileLike(value: unknown): value is TopLevelTile {
+function normalizeLegacyTopLevelTileIds(
+  value: unknown,
+  shortcuts: LegacyShortcut[],
+  folders: LegacyFolder[],
+  tiles: Record<TileId, Tile>
+) {
+  const shortcutIds = new Set(shortcuts.map((shortcut) => shortcut.id));
+  const folderIds = new Set(folders.map((folder) => folder.id));
+  const seen = new Set<TileId>();
+  const tileIds: TileId[] = [];
+
+  if (Array.isArray(value)) {
+    for (const tile of value) {
+      if (!isLegacyTopLevelTile(tile)) {
+        continue;
+      }
+
+      const exists = tile.type === "shortcut" ? shortcutIds.has(tile.id) : folderIds.has(tile.id);
+      if (!exists || !tiles[tile.id] || seen.has(tile.id)) {
+        continue;
+      }
+
+      seen.add(tile.id);
+      tileIds.push(tile.id);
+    }
+  }
+
+  for (const shortcut of shortcuts) {
+    if (tiles[shortcut.id] && !seen.has(shortcut.id)) {
+      seen.add(shortcut.id);
+      tileIds.push(shortcut.id);
+    }
+  }
+
+  for (const folder of folders) {
+    if (tiles[folder.id] && !seen.has(folder.id)) {
+      seen.add(folder.id);
+      tileIds.push(folder.id);
+    }
+  }
+
+  return tileIds;
+}
+
+function normalizeTiles(value: Record<string, unknown>): Record<TileId, Tile> {
+  const tiles: Record<TileId, Tile> = {};
+
+  for (const [id, tile] of Object.entries(value)) {
+    if (!isRecord(tile) || tile.id !== id) {
+      continue;
+    }
+
+    if (tile.kind === "shortcut" && typeof tile.title === "string" && typeof tile.url === "string" && isRecord(tile.icon)) {
+      tiles[id] = tile as Shortcut;
+    }
+
+    if (tile.kind === "folder" && typeof tile.title === "string" && isRecord(tile.icon) && Array.isArray(tile.childIds)) {
+      tiles[id] = {
+        ...(tile as Folder),
+        childIds: tile.childIds.filter((childId): childId is string => typeof childId === "string")
+      };
+    }
+  }
+
+  return Object.keys(tiles).length > 0 ? tiles : defaultTabState.tiles;
+}
+
+function isFolderChild(tileId: TileId, tiles: Record<TileId, Tile>) {
+  return Object.values(tiles).some((tile) => tile.kind === "folder" && tile.childIds.includes(tileId));
+}
+
+function toShortcut(shortcut: LegacyShortcut): Shortcut {
+  return {
+    ...shortcut,
+    kind: "shortcut"
+  };
+}
+
+function isLegacyShortcut(value: unknown): value is LegacyShortcut {
   return (
-    typeof value === "object" &&
-    value !== null &&
-    "type" in value &&
-    "id" in value &&
+    isRecord(value) &&
+    typeof value.id === "string" &&
+    typeof value.title === "string" &&
+    typeof value.url === "string" &&
+    isRecord(value.icon)
+  );
+}
+
+function isLegacyFolder(value: unknown): value is LegacyFolder {
+  return (
+    isRecord(value) &&
+    typeof value.id === "string" &&
+    typeof value.title === "string" &&
+    isRecord(value.icon) &&
+    Array.isArray(value.quickLinks)
+  );
+}
+
+function isLegacyTopLevelTile(value: unknown): value is LegacyTopLevelTile {
+  return (
+    isRecord(value) &&
     (value.type === "shortcut" || value.type === "folder") &&
     typeof value.id === "string"
   );
+}
+
+function isSearchProviderId(value: unknown): value is SearchProviderId {
+  return typeof value === "string" && value in searchProviders;
 }
 
 function isGridLayoutPresetId(value: unknown): value is GridLayoutPresetId {
@@ -305,25 +537,4 @@ function clampInteger(value: unknown, min: number, max: number, fallback: number
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
-}
-
-function createQuickLink(
-  id: string,
-  title: string,
-  url: string,
-  background: string,
-  brandIconId?: BrandIconId
-): QuickLink {
-  return {
-    id,
-    title,
-    url,
-      icon: {
-        type: brandIconId ? "brand" : "fallback",
-        label: title.slice(0, 1).toUpperCase(),
-        background,
-        imageMediaId: null,
-        brandIconId: brandIconId ?? null
-      }
-    };
 }

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
+import { produce } from "immer";
 import { findBrandIconRecommendations, type BrandIcon } from "../../domain/brandIcons";
 import {
   describeBackupReplacement,
@@ -8,48 +9,44 @@ import {
 import {
   searchProviders,
   type Folder,
-  type QuickLink,
+  type Shortcut,
   type SearchProviderId,
   type TabState
 } from "../../domain/tabState";
 import {
   applyRecommendedIcon,
-  createFolderFromDraft,
-  createQuickLinkFromDraft,
+  createShortcutFromDraft,
   deleteFolderFromState,
-  deleteQuickLinkFromState,
-  moveTopLevelTileInState,
+  deleteShortcutFromState,
+  getShortcutPageIndex,
+  updateFolder,
+  updateFolderFromDraft,
+  resolveActiveFolder,
   resolveTopLevelTiles,
-  upsertFolder,
-  upsertQuickLink
+  upsertShortcut
 } from "../../domain/tabOperations";
+import { applyDropAction, type DropAction } from "../../domain/dropActions";
 import { readFileAsDataUrl } from "../../infrastructure/fileData";
 import { deleteMediaDataUrl } from "../../infrastructure/mediaStorage";
-import { loadTabState, saveTabState } from "../../infrastructure/tabStorage";
-import {
-  emptyFolderDraft,
-  emptyQuickLinkDraft,
-  type FolderDraft,
-  type QuickLinkDraft
-} from "../model/drafts";
+import { useTabStore } from "../../stores/useTabStore";
+import { emptyShortcutDraft, type FolderEditDraft, type ShortcutDraft } from "../model/drafts";
 
 export function useNewTabController() {
-  const [tabState, setTabState] = useState<TabState | null>(null);
+  const tabState = useTabStore();
+  const replaceTabState = useTabStore((state) => state.replaceState);
+  const updateTabState = useTabStore((state) => state.updateState);
+  const setLayout = useTabStore((state) => state.setLayout);
+  const setSearchProvider = useTabStore((state) => state.setSearchProvider);
+  const setWallpaper = useTabStore((state) => state.setWallpaper);
   const [query, setQuery] = useState("");
-  const [quickLinkDraft, setQuickLinkDraft] = useState<QuickLinkDraft | null>(null);
-  const [folderDraft, setFolderDraft] = useState<FolderDraft | null>(null);
+  const [shortcutDraft, setShortcutDraft] = useState<ShortcutDraft | null>(null);
+  const [folderDraft, setFolderDraft] = useState<FolderEditDraft | null>(null);
   const [activeFolderId, setActiveFolderId] = useState<string | null>(null);
   const [isSettingsDrawerOpen, setIsSettingsDrawerOpen] = useState(false);
   const [wallpaperMessage, setWallpaperMessage] = useState<string | null>(null);
   const [backupMessage, setBackupMessage] = useState<string | null>(null);
-  const [draggedTopLevelTileKey, setDraggedTopLevelTileKey] = useState<string | null>(null);
-  const [dragOverTopLevelTileKey, setDragOverTopLevelTileKey] = useState<string | null>(null);
   const [activeShortcutPage, setActiveShortcutPage] = useState(0);
   const gridRef = useRef<HTMLElement | null>(null);
-
-  useEffect(() => {
-    void loadTabState().then(setTabState);
-  }, []);
 
   useEffect(() => {
     function closeOverlays(event: KeyboardEvent) {
@@ -58,7 +55,7 @@ export function useNewTabController() {
       }
 
       setIsSettingsDrawerOpen(false);
-      setQuickLinkDraft(null);
+      setShortcutDraft(null);
       setFolderDraft(null);
       setActiveFolderId(null);
     }
@@ -68,76 +65,51 @@ export function useNewTabController() {
   }, []);
 
   const activeSearchProvider = useMemo(() => {
-    if (!tabState) {
-      return searchProviders.google;
-    }
-
     return searchProviders[tabState.searchProvider];
   }, [tabState]);
 
-  const topLevelTiles = useMemo(() => (tabState ? resolveTopLevelTiles(tabState) : []), [tabState]);
-  const hasOverlayOpen = isSettingsDrawerOpen || quickLinkDraft !== null || folderDraft !== null || activeFolderId !== null;
-  const activeFolder = activeFolderId
-    ? tabState?.folders.find((folder) => folder.id === activeFolderId) ?? null
-    : null;
-  const quickLinkIconRecommendations = quickLinkDraft
-    ? findBrandIconRecommendations(quickLinkDraft.title, quickLinkDraft.url)
+  const topLevelTiles = useMemo(() => resolveTopLevelTiles(tabState), [tabState]);
+  const hasOverlayOpen = isSettingsDrawerOpen || shortcutDraft !== null || folderDraft !== null || activeFolderId !== null;
+  const activeFolder = resolveActiveFolder(tabState, activeFolderId);
+  const shortcutIconRecommendations = shortcutDraft
+    ? findBrandIconRecommendations(shortcutDraft.title, shortcutDraft.url)
     : [];
 
-  async function persistState(nextState: TabState) {
-    const persistedState = await saveTabState(nextState);
-    setTabState(persistedState);
+  function persistState(nextState: TabState) {
+    replaceTabState(nextState);
   }
 
   function moveToTilePage(nextState: TabState, type: "shortcut" | "folder", id: string) {
-    const tileIndex = nextState.topLevelTiles.findIndex((tile) => tile.type === type && tile.id === id);
-    if (tileIndex >= 0) {
-      setActiveShortcutPage(Math.floor(tileIndex / (nextState.layout.gridLayout.rows * nextState.layout.gridLayout.columns)));
+    const pageIndex = getShortcutPageIndex(nextState, id);
+    if (pageIndex >= 0) {
+      setActiveShortcutPage(pageIndex);
     }
   }
 
-  async function changeSearchProvider(providerId: SearchProviderId) {
-    if (!tabState) {
-      return;
-    }
-
-    await persistState({ ...tabState, searchProvider: providerId });
+  function changeSearchProvider(providerId: SearchProviderId) {
+    setSearchProvider(providerId);
   }
 
-  async function changeLayout<K extends keyof TabState["layout"]>(key: K, value: TabState["layout"][K]) {
-    if (!tabState) {
-      return;
-    }
-
-    await persistState({
-      ...tabState,
-      layout: {
-        ...tabState.layout,
-        [key]: value
-      }
-    });
+  function changeLayout<K extends keyof TabState["layout"]>(key: K, value: TabState["layout"][K]) {
+    setLayout(key, value);
   }
 
-  function openNewQuickLinkDialog() {
-    setQuickLinkDraft({ ...emptyQuickLinkDraft, folderId: activeFolderId });
+  function openNewShortcutDialog() {
+    setShortcutDraft({ ...emptyShortcutDraft, folderId: activeFolderId });
   }
 
-  function openEditQuickLinkDialog(quickLink: QuickLink, folderId: string | null = null) {
-    setQuickLinkDraft({
-      id: quickLink.id,
+  function openEditShortcutDialog(shortcut: Shortcut, folderId: string | null = null) {
+    setShortcutDraft({
+      id: shortcut.id,
       folderId,
-      title: quickLink.title,
-      url: quickLink.url,
-      iconLabel: quickLink.icon.label,
-      iconBackground: quickLink.icon.background,
-      iconImageDataUrl: quickLink.icon.imageDataUrl ?? null,
-      iconMediaId: quickLink.icon.imageMediaId ?? null,
-      brandIconId: quickLink.icon.brandIconId ?? null
+      title: shortcut.title,
+      url: shortcut.url,
+      iconLabel: shortcut.icon.label,
+      iconBackground: shortcut.icon.background,
+      iconImageDataUrl: shortcut.icon.imageDataUrl ?? null,
+      iconMediaId: shortcut.icon.imageMediaId ?? null,
+      brandIconId: shortcut.icon.brandIconId ?? null
     });
-  }
-
-  function openNewFolderDialog() {
-    setFolderDraft(emptyFolderDraft);
   }
 
   function openEditFolderDialog(folder: Folder) {
@@ -149,67 +121,64 @@ export function useNewTabController() {
     });
   }
 
-  async function saveQuickLink(event: FormEvent<HTMLFormElement>) {
+  async function saveShortcut(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
-    if (!quickLinkDraft || !tabState) {
+    if (!shortcutDraft) {
       return;
     }
 
-    const nextQuickLink = createQuickLinkFromDraft(quickLinkDraft);
-    if (!nextQuickLink) {
+    const nextShortcut = createShortcutFromDraft(shortcutDraft);
+    if (!nextShortcut) {
       return;
     }
 
-    const nextState = upsertQuickLink(tabState, nextQuickLink, quickLinkDraft);
-    await persistState(nextState);
-    if (quickLinkDraft.iconMediaId && nextQuickLink.icon.type !== "image") {
-      await deleteMediaDataUrl(quickLinkDraft.iconMediaId);
+    const nextState = upsertShortcut(tabState, nextShortcut, shortcutDraft);
+    persistState(nextState);
+    if (shortcutDraft.iconMediaId && nextShortcut.icon.type !== "image") {
+      await deleteMediaDataUrl(shortcutDraft.iconMediaId);
     }
-    if (!quickLinkDraft.id && !quickLinkDraft.folderId) {
-      moveToTilePage(nextState, "shortcut", nextQuickLink.id);
+    if (!shortcutDraft.id && !shortcutDraft.folderId) {
+      moveToTilePage(nextState, "shortcut", nextShortcut.id);
     }
-    setQuickLinkDraft(null);
+    setShortcutDraft(null);
   }
 
-  async function deleteQuickLink() {
-    if (!quickLinkDraft?.id || !tabState) {
+  async function deleteShortcut() {
+    if (!shortcutDraft?.id) {
       return;
     }
 
-    await persistState(deleteQuickLinkFromState(tabState, quickLinkDraft));
-    if (quickLinkDraft.iconMediaId) {
-      await deleteMediaDataUrl(quickLinkDraft.iconMediaId);
+    persistState(deleteShortcutFromState(tabState, shortcutDraft));
+    if (shortcutDraft.iconMediaId) {
+      await deleteMediaDataUrl(shortcutDraft.iconMediaId);
     }
-    setQuickLinkDraft(null);
+    setShortcutDraft(null);
   }
 
   async function saveFolder(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
-    if (!folderDraft || !tabState) {
+    if (!folderDraft) {
       return;
     }
 
-    const nextFolder = createFolderFromDraft(tabState, folderDraft);
+    const nextFolder = updateFolderFromDraft(tabState, folderDraft);
     if (!nextFolder) {
       return;
     }
 
-    const nextState = upsertFolder(tabState, nextFolder, folderDraft);
-    await persistState(nextState);
-    if (!folderDraft.id) {
-      moveToTilePage(nextState, "folder", nextFolder.id);
-    }
+    const nextState = updateFolder(tabState, nextFolder);
+    persistState(nextState);
     setFolderDraft(null);
   }
 
   async function deleteFolder() {
-    if (!folderDraft?.id || !tabState) {
+    if (!folderDraft?.id) {
       return;
     }
 
-    await persistState(deleteFolderFromState(tabState, folderDraft.id));
+    persistState(deleteFolderFromState(tabState, folderDraft.id));
 
     if (activeFolderId === folderDraft.id) {
       setActiveFolderId(null);
@@ -218,21 +187,16 @@ export function useNewTabController() {
     setFolderDraft(null);
   }
 
-  async function moveTopLevelTile(targetTileKey: string) {
-    if (!tabState || !draggedTopLevelTileKey || draggedTopLevelTileKey === targetTileKey) {
-      return;
-    }
-
-    await persistState(moveTopLevelTileInState(tabState, draggedTopLevelTileKey, targetTileKey));
-  }
-
-  function finishDragging() {
-    setDraggedTopLevelTileKey(null);
-    setDragOverTopLevelTileKey(null);
+  function dispatchDropAction(action: DropAction) {
+    updateTabState((state) =>
+      produce(state, (draft) => {
+        applyDropAction(draft, action);
+      })
+    );
   }
 
   async function uploadWallpaper(file: File | null) {
-    if (!file || !tabState) {
+    if (!file) {
       return;
     }
 
@@ -244,13 +208,10 @@ export function useNewTabController() {
     try {
       setWallpaperMessage("Saving wallpaper...");
       const wallpaperDataUrl = await readFileAsDataUrl(file);
-      await persistState({
-        ...tabState,
-        wallpaper: {
-          ...tabState.wallpaper,
-          type: "dataUrl",
-          value: wallpaperDataUrl
-        }
+      setWallpaper({
+        ...tabState.wallpaper,
+        type: "dataUrl",
+        value: wallpaperDataUrl
       });
       setWallpaperMessage("Wallpaper saved.");
     } catch {
@@ -258,8 +219,8 @@ export function useNewTabController() {
     }
   }
 
-  async function uploadQuickLinkIcon(file: File | null) {
-    if (!file || !quickLinkDraft) {
+  async function uploadShortcutIcon(file: File | null) {
+    if (!file || !shortcutDraft) {
       return;
     }
 
@@ -268,36 +229,29 @@ export function useNewTabController() {
     }
 
     const iconDataUrl = await readFileAsDataUrl(file);
-    setQuickLinkDraft({
-      ...quickLinkDraft,
+    setShortcutDraft({
+      ...shortcutDraft,
       iconImageDataUrl: iconDataUrl,
-      iconMediaId: quickLinkDraft.iconMediaId
+      iconMediaId: shortcutDraft.iconMediaId
     });
   }
 
   function chooseRecommendedIcon(icon: BrandIcon) {
-    if (!quickLinkDraft) {
+    if (!shortcutDraft) {
       return;
     }
 
-    setQuickLinkDraft(applyRecommendedIcon(quickLinkDraft, icon));
+    setShortcutDraft(applyRecommendedIcon(shortcutDraft, icon));
   }
 
   async function resetWallpaper() {
-    if (!tabState) {
-      return;
-    }
-
     try {
-      await persistState({
-        ...tabState,
-        wallpaper: {
-          type: "none",
-          value: null,
-          mediaId: null,
-          dim: tabState.wallpaper.dim,
-          blur: tabState.wallpaper.blur
-        }
+      setWallpaper({
+        type: "none",
+        value: null,
+        mediaId: null,
+        dim: tabState.wallpaper.dim,
+        blur: tabState.wallpaper.blur
       });
       if (tabState.wallpaper.mediaId) {
         await deleteMediaDataUrl(tabState.wallpaper.mediaId);
@@ -309,24 +263,13 @@ export function useNewTabController() {
   }
 
   async function changeWallpaperSetting(key: "dim" | "blur", value: number) {
-    if (!tabState) {
-      return;
-    }
-
-    await persistState({
-      ...tabState,
-      wallpaper: {
-        ...tabState.wallpaper,
-        [key]: value
-      }
+    setWallpaper({
+      ...tabState.wallpaper,
+      [key]: value
     });
   }
 
   function exportBackup() {
-    if (!tabState) {
-      return;
-    }
-
     const backupBlob = new Blob([JSON.stringify(tabState, null, 2)], {
       type: "application/json"
     });
@@ -355,9 +298,9 @@ export function useNewTabController() {
         return;
       }
 
-      await persistState(nextState);
+      persistState(nextState);
       setActiveFolderId(null);
-      setQuickLinkDraft(null);
+      setShortcutDraft(null);
       setFolderDraft(null);
       setBackupMessage("Backup imported.");
     } catch (error) {
@@ -376,40 +319,34 @@ export function useNewTabController() {
     changeWallpaperSetting,
     chooseRecommendedIcon,
     deleteFolder,
-    deleteQuickLink,
-    dragOverTopLevelTileKey,
-    draggedTopLevelTileKey,
+    deleteShortcut,
+    dispatchDropAction,
     exportBackup,
-    finishDragging,
     folderDraft,
     gridRef,
     hasOverlayOpen,
     importBackup,
     isSettingsDrawerOpen,
     openEditFolderDialog,
-    openEditQuickLinkDialog,
-    openNewFolderDialog,
-    openNewQuickLinkDialog,
+    openEditShortcutDialog,
+    openNewShortcutDialog,
     query,
-    quickLinkDraft,
-    quickLinkIconRecommendations,
+    shortcutDraft,
+    shortcutIconRecommendations,
     resetWallpaper,
     saveFolder,
-    saveQuickLink,
+    saveShortcut,
     setActiveFolderId,
     setActiveShortcutPage,
     setBackupMessage,
-    setDragOverTopLevelTileKey,
-    setDraggedTopLevelTileKey,
     setFolderDraft,
     setIsSettingsDrawerOpen,
     setQuery,
-    setQuickLinkDraft,
+    setShortcutDraft,
     tabState,
     topLevelTiles,
-    uploadQuickLinkIcon,
+    uploadShortcutIcon,
     uploadWallpaper,
-    wallpaperMessage,
-    moveTopLevelTile
+    wallpaperMessage
   };
 }
