@@ -71,6 +71,7 @@ export function ShortcutGrid({
   const [dragState, setDragState] = useState<DragState | null>(null);
   const [dropTargetKey, setDropTargetKey] = useState<string | null>(null);
   const [dropPosition, setDropPosition] = useState<DropPosition | null>(null);
+  const [outgoingInitialRects, setOutgoingInitialRects] = useState<Record<string, DOMRect> | null>(null);
 
   // Timer-based zone detection refs
   const moveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -90,6 +91,7 @@ export function ShortcutGrid({
     setDropTargetKey(null);
     setDropPosition(null);
     setConfirmedZone(null);
+    setOutgoingInitialRects(null);
     setDragOverlay(null);
   };
 
@@ -98,6 +100,9 @@ export function ShortcutGrid({
     if (outgoingDragSource) {
       clearDragSession();
       dropHandledRef.current = false; // Reset for new folder-child drag
+      requestAnimationFrame(() => {
+        setOutgoingInitialRects(captureTileRects(gridRef.current));
+      });
     }
   }, [outgoingDragSource]);
 
@@ -145,6 +150,10 @@ export function ShortcutGrid({
     () => new Map(draggableTiles.map((tile, index) => [tile.key, { index, tile }])),
     [draggableTiles]
   );
+  const visibleItemByKey = useMemo(
+    () => new Map(visibleShortcutPageItems.map((tile, index) => [tile.key, { index, tile }])),
+    [visibleShortcutPageItems]
+  );
   const visibleKeyIndexByKey = useMemo(
     () => new Map(visibleShortcutPageItems.map((tile, index) => [tile.key, index])),
     [visibleShortcutPageItems]
@@ -188,6 +197,7 @@ export function ShortcutGrid({
   const handleDragStart = (e: React.DragEvent<HTMLElement>, tileKey: string, index: number) => {
     const tile = draggableTileByKey.get(tileKey)?.tile;
     if (!tile) return;
+    
     dropHandledRef.current = false;
     
     const initialRects = captureTileRects(gridRef.current);
@@ -201,7 +211,6 @@ export function ShortcutGrid({
     setDropTargetKey(null);
     setDropPosition(null);
     
-    // Set up drag overlay for real tile following pointer
     setDragOverlay({
       tile,
       x: e.clientX,
@@ -210,11 +219,6 @@ export function ShortcutGrid({
     
     e.dataTransfer.effectAllowed = "move";
     e.dataTransfer.setData("text/plain", tileKey);
-    
-    // Hide default drag image - we'll use our custom overlay
-    const img = new Image();
-    img.src = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
-    e.dataTransfer.setDragImage(img, 0, 0);
   };
 
   const handleDragOver = (e: React.DragEvent<HTMLElement>, tileKey: string, rect: DOMRect) => {
@@ -336,48 +340,79 @@ export function ShortcutGrid({
   // Compute live shifting - which tiles should shift as we drag (FLIP-like animation)
   // Use dropPosition (immediate) not confirmedZone (debounced) for live feedback
   const getTileShift = (tileKey: string): { x: number, y: number } => {
-    if (!dragState || !dropTargetKey || !dropPosition || dropPosition === "center") {
+    if (!dropTargetKey || !dropPosition || dropPosition === "center") {
       return emptyShift;
     }
     
     const activeZone = confirmedZone ?? dropPosition;
-    const sourceIndex = draggableTileByKey.get(dragState.sourceKey)?.index ?? -1;
-    const targetIndex = draggableTileByKey.get(dropTargetKey)?.index ?? -1;
+    const targetIndex = outgoingDragSource
+      ? visibleItemByKey.get(dropTargetKey)?.index ?? -1
+      : draggableTileByKey.get(dropTargetKey)?.index ?? -1;
     
-    if (sourceIndex === -1 || targetIndex === -1 || sourceIndex === targetIndex) {
+    if (targetIndex === -1) {
       return emptyShift;
     }
     
-    const tileIndex = draggableTileByKey.get(tileKey)?.index ?? -1;
+    const tileIndex = outgoingDragSource
+      ? visibleItemByKey.get(tileKey)?.index ?? -1
+      : draggableTileByKey.get(tileKey)?.index ?? -1;
     if (tileIndex === -1) return emptyShift;
     
     let shift = 0;
-    if (sourceIndex < targetIndex) {
-      if (activeZone === "right") {
-        if (tileIndex > sourceIndex && tileIndex <= targetIndex) shift = -1;
-      } else if (activeZone === "left") {
-        if (tileIndex > sourceIndex && tileIndex < targetIndex) shift = -1;
+    const sourceIndex = dragState ? draggableTileByKey.get(dragState.sourceKey)?.index ?? -1 : -1;
+    if (dragState) {
+      if (sourceIndex === -1 || sourceIndex === targetIndex) {
+        return emptyShift;
       }
-    } else if (sourceIndex > targetIndex) {
-      if (activeZone === "left") {
-        if (tileIndex >= targetIndex && tileIndex < sourceIndex) shift = 1;
-      } else if (activeZone === "right") {
-        if (tileIndex > targetIndex && tileIndex < sourceIndex) shift = 1;
+
+      if (sourceIndex < targetIndex) {
+        if (activeZone === "right") {
+          if (tileIndex > sourceIndex && tileIndex <= targetIndex) shift = -1;
+        } else if (activeZone === "left") {
+          if (tileIndex > sourceIndex && tileIndex < targetIndex) shift = -1;
+        }
+      } else if (sourceIndex > targetIndex) {
+        if (activeZone === "left") {
+          if (tileIndex >= targetIndex && tileIndex < sourceIndex) shift = 1;
+        } else if (activeZone === "right") {
+          if (tileIndex > targetIndex && tileIndex < sourceIndex) shift = 1;
+        }
       }
+    } else if (outgoingDragSource) {
+      const insertIndex = activeZone === "right" ? targetIndex + 1 : targetIndex;
+      if (tileIndex >= insertIndex) shift = 1;
     }
     
     if (shift === 0) return emptyShift;
 
     const targetTileIndex = tileIndex + shift;
-    const targetTile = draggableTiles[targetTileIndex];
+    const shiftItems = outgoingDragSource ? visibleShortcutPageItems : draggableTiles;
+    const targetTile = shiftItems[targetTileIndex];
+    const initialRects = dragState?.initialRects ?? outgoingInitialRects;
     
-    if (targetTile && dragState.initialRects[tileKey] && dragState.initialRects[targetTile.key]) {
-      const sourceRect = dragState.initialRects[tileKey];
-      const targetRect = dragState.initialRects[targetTile.key];
+    if (targetTile && initialRects?.[tileKey] && initialRects[targetTile.key]) {
+      const sourceRect = initialRects[tileKey];
+      const targetRect = initialRects[targetTile.key];
       return getShiftBetweenRects(sourceRect, targetRect);
+    }
+
+    if (outgoingDragSource && targetTileIndex === shiftItems.length && initialRects?.[tileKey]) {
+      return getOverflowShift(initialRects[tileKey]);
     }
     
     return emptyShift;
+  };
+
+  const getOverflowShift = (sourceRect: DOMRect) => {
+    const gridRect = gridRef.current?.getBoundingClientRect();
+    if (!gridRect) {
+      return emptyShift;
+    }
+
+    return {
+      x: gridRect.right - sourceRect.left + sourceRect.width,
+      y: 0
+    };
   };
 
   return (
@@ -457,9 +492,22 @@ export function ShortcutGrid({
         }}
       >
         {visibleShortcutPageItems.map((tile: ShortcutPageItem, index: number) => {
+          const shift = getTileShift(tile.key);
+          const tileShiftStyle = (shift.x !== 0 || shift.y !== 0) ? { 
+            transform: `translate(${shift.x}px, ${shift.y}px)`,
+            transition: reducedMotion ? 'none' : 'transform 100ms ease-out'
+          } : {};
+
           if (tile.type === "create-shortcut") {
             return (
-              <button className="quick-link add-link" type="button" key={tile.key} onClick={onOpenNewShortcutDialog}>
+              <button
+                className="quick-link add-link"
+                data-tile-key={tile.key}
+                key={tile.key}
+                onClick={onOpenNewShortcutDialog}
+                style={tileShiftStyle}
+                type="button"
+              >
                 <span className="quick-link-icon add-link-icon" aria-hidden="true">
                   +
                 </span>
@@ -470,13 +518,6 @@ export function ShortcutGrid({
 
           const isDragging = dragState?.sourceKey === tile.key;
           const isDropTarget = dropTargetKey === tile.key;
-          
-          // Calculate live shift for FLIP-like animation
-          const shift = getTileShift(tile.key);
-          const tileShiftStyle = (shift.x !== 0 || shift.y !== 0) ? { 
-            transform: `translate(${shift.x}px, ${shift.y}px)`,
-            transition: reducedMotion ? 'none' : 'transform 100ms ease-out'
-          } : {};
           
           const effectiveZone = confirmedZone ?? dropPosition;
           let tileClassName = [
