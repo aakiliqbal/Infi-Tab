@@ -18,6 +18,15 @@ body,
   overflow: hidden;
 }
 
+body.popup-body,
+body.popup-body #root {
+  width: 420px;
+  height: auto;
+  min-height: 0;
+  overflow: auto;
+  background: #eef2f7;
+}
+
 button,
 input {
   font: inherit;
@@ -563,6 +572,26 @@ input {
   justify-items: center;
 }
 
+.shortcut-page-edge {
+  position: fixed;
+  z-index: 35;
+  opacity: 0.22;
+  pointer-events: none;
+  transition: opacity 300ms ease;
+}
+
+.shortcut-page-edge.active {
+  opacity: 0.75;
+}
+
+.shortcut-page-edge-prev {
+  background: linear-gradient(90deg, rgba(255, 255, 255, 0.42), rgba(255, 255, 255, 0.12));
+}
+
+.shortcut-page-edge-next {
+  background: linear-gradient(270deg, rgba(255, 255, 255, 0.42), rgba(255, 255, 255, 0.12));
+}
+
 .shortcut-page-dots {
   display: flex;
   gap: 14px;
@@ -926,6 +955,31 @@ transition:
   box-shadow: 0 24px 80px rgba(0, 0, 0, 0.38);
   color: #1f2937;
   overflow: hidden;
+}
+
+.popup-root {
+  width: 420px;
+  min-height: 520px;
+  background: linear-gradient(180deg, #f8fafc, #eef2f7);
+  padding: 0;
+}
+
+.popup-panel {
+  width: 420px;
+  min-height: 520px;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.popup-panel .modal-header {
+  padding-bottom: 0;
+}
+
+.popup-panel .modal-header p {
+  margin: 6px 0 0;
+  color: #6b7280;
+  font-size: 13px;
+  line-height: 1.4;
 }
 
 .modal-header {

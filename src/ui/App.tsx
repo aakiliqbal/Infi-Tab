@@ -213,6 +213,7 @@ export function App() {
           onOpenNewShortcutDialog={controller.openNewShortcutDialog}
           onSetActiveFolderId={controller.setActiveFolderId}
           onSetActiveShortcutPage={controller.setActiveShortcutPage}
+          pageCapacity={pageCapacity}
           pageCount={shortcutPageCount}
           showLabels={tabState.layout.showLabels}
           tabState={tabState}

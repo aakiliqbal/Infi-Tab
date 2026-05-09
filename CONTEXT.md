@@ -29,6 +29,9 @@ The user-selected background media for the New Tab Surface. It may be a static i
 **Settings Drawer**  
 The right-side drawer that exposes Search, Grid Layout, Wallpaper, and Backup controls.
 
+**Toolbar Popup**  
+The Chrome extension action popup used to add the current active website as a Shortcut without opening the New Tab Surface.
+
 **Backup**  
 A portable JSON representation of the full `TabState`, including user settings and media data URLs.
 
@@ -62,6 +65,7 @@ A domain command produced from Drag Intent: `REORDER`, `COMBINE`, `ADD_TO_FOLDER
 
 - Infi Tab is local-first; no backend or account sync exists in the MVP.
 - Zustand persist writes runtime state to `chrome.storage.local`; localStorage is the dev fallback.
+- The Toolbar Popup writes to the same persisted `TabState` as the New Tab Surface.
 - JSON Backup is replace-only on import.
 - Wallpapers and uploaded icons remain portable as data URLs.
 - IndexedDB media infrastructure exists but is not wired into the active runtime persistence path.
@@ -69,6 +73,7 @@ A domain command produced from Drag Intent: `REORDER`, `COMBINE`, `ADD_TO_FOLDER
 ### Product Structure
 
 - The New Tab Surface is a single React app, not multiple extension pages.
+- The Toolbar Popup is a second React entry point that reuses the shortcut editor form and persisted store.
 - Folders are created by dragging one Shortcut onto another (gesture-based combine).
 - A Folder always contains at least two Shortcuts; removal that leaves one child promotes it to the page.
 - Deleting a Folder deletes its contained Shortcuts.
@@ -107,7 +112,7 @@ A domain command produced from Drag Intent: `REORDER`, `COMBINE`, `ADD_TO_FOLDER
 - Drag UI maps Drag Source plus Drop Target into Drop Action through `src/ui/drag/dropActionAdapter.ts`.
 - Drag Intent uses left/center/right UI zones (30%/40%/30%).
 - Zone confirmation uses 200ms debounce timer.
-- Cross-page drag is supported in the domain reducer but not wired in the UI.
+- Cross-page Top-Level Tile drag is wired through page-edge hover navigation: 10vw/max-130px edge zones, 300ms first hold, then slower repeat paging.
 - Keyboard and touch drag are separate future work.
 
 ### Technology
@@ -126,10 +131,12 @@ A domain command produced from Drag Intent: `REORDER`, `COMBINE`, `ADD_TO_FOLDER
 - [x] Paged tile grid (Shortcut Pages)
 - [x] Grid Layout with presets and customization
 - [x] Shortcut CRUD
+- [x] Toolbar popup add-current-site shortcut flow
 - [x] Folder creation via drag combine
 - [x] Folder edit/delete modal
 - [x] FolderPanel child view
 - [x] FolderPanel child reorder and drag-out promotion
+- [x] Cross-page Top-Level Tile drag via page-edge hover
 - [x] Top-level reorder
 - [x] Add shortcut to folder
 - [x] Settings Drawer

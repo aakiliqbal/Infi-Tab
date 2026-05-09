@@ -5,6 +5,7 @@
 Infi Tab is a local-first Chrome Manifest V3 new-tab extension. Product shape confirmed by reference extension analysis:
 
 - Fixed full-viewport new tab page
+- Toolbar popup to add the current site
 - Configurable search box
 - Paged shortcut grid with folders
 - Wallpaper layer (image/GIF)
@@ -14,16 +15,19 @@ Infi Tab is a local-first Chrome Manifest V3 new-tab extension. Product shape co
 ## Architecture Layers
 
 ```
-Chrome New Tab
+Chrome Extension
   └─ public/manifest.json          # MV3 extension manifest
-      └─ src/main.tsx           # React entry point
-          └─ src/ui/App.tsx     # Root component
-              ├─ useNewTabController()    # Transient UI state
-              ├─ ShortcutGrid     # Paged tile grid
-              ├─ SettingsDrawer  # Settings surface
-              ├─ FolderModal   # Folder edit modal
-              ├─ FolderPanel  # Folder child view
-              └─ ShortcutModal # Shortcut add/edit
+      ├─ src/main.tsx           # New Tab Surface React entry point
+      │   └─ src/ui/App.tsx     # New Tab Surface root component
+      │       ├─ useNewTabController()    # Transient UI state
+      │       ├─ ShortcutGrid     # Paged tile grid
+      │       ├─ SettingsDrawer  # Settings surface
+      │       ├─ FolderModal   # Folder edit modal
+      │       ├─ FolderPanel  # Folder child view
+      │       └─ ShortcutModal # Shortcut add/edit
+      └─ src/popup.tsx          # Toolbar popup React entry point
+          ├─ src/ui/PopupApp.tsx
+          └─ src/ui/ShortcutForm.tsx # Shared shortcut editor form
 
 Domain Layer (src/domain/)
   ├─ tabState.ts        # State schema & defaults
@@ -89,7 +93,8 @@ Persisted `pages[].tileIds` is top-level order. The visible Shortcut Pages are d
 
 | Surface | Description |
 |---------|-----------|
-| New Tab Surface | Only first-class runtime page |
+| New Tab Surface | Primary runtime page |
+| Toolbar Popup | Add current active website as a Shortcut |
 | Shortcut Grid | Paged top-level tile grid |
 | Settings Drawer | Right-side settings |
 | Shortcut Modal | Add/edit shortcuts |
@@ -123,7 +128,7 @@ The extracted Infinity New Tab Pro extension confirms:
 7. Drag uses real tile overlay following pointer
 8. 30/40/30 split zones for insert/combine/insert
 9. Zone confirmation via 200ms timer
-10. Cross-page via edge detection (unverified in source)
+10. Cross-page via full-height edge detection: 10vw/max-130px edge zones, 300ms initial hold, slower repeat paging
 
 ## Design Decisions from Code
 
@@ -141,7 +146,7 @@ The extracted Infinity New Tab Pro extension confirms:
 - [x] Top-level reorder (active page)
 - [x] Combine (shortcut + shortcut → folder)
 - [x] Add to folder (shortcut → folder)
-- [ ] Cross-page drag (wired in domain, not UI)
+- [x] Cross-page Top-Level Tile drag via page-edge hover
 - [x] Folder child drag reorder and drag-out promotion
 - [ ] Keyboard drag
 - [ ] Touch drag
@@ -150,5 +155,5 @@ The extracted Infinity New Tab Pro extension confirms:
 
 1. Extract drag hook from ShortcutGrid
 2. Route native drag through resolveDrop()
-3. Wire cross-page drag UI
+3. Extract drag session logic from ShortcutGrid
 4. Add keyboard/touch drag adapters
