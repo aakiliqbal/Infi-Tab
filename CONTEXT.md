@@ -27,7 +27,7 @@ The Widget containing Shortcut Pages, Top-Level Tiles, and tile/folder drag beha
 A top-level or folder-contained link with a title, URL, and icon.
 
 **Shortcut Page**  
-A visible partition derived from top-level order, Grid Layout capacity, and the Shortcut creation tile, sized to fit within the viewport without vertical page scrolling.
+A visible partition derived from top-level order and Grid Layout capacity, sized to fit within the viewport without vertical page scrolling.
 _Avoid_: browser page, tab page, slide
 
 **Folder**  
@@ -96,6 +96,7 @@ A domain command produced from Drag Intent: `REORDER`, `COMBINE`, `ADD_TO_FOLDER
 - Widgets can be disabled; disabled Widgets keep settings and last placement but do not reserve Canvas space.
 - Canvas Edit Mode is toggled from the toolbar, shows Widget frames/alignment guides, enables Widget movement/resizing, and disables tile drag.
 - The Toolbar Popup is a second React entry point that reuses the shortcut editor form and persisted store.
+- UI Modules are grouped by product concept: Canvas hosts Widget placement, each Widget owns its own rendering and settings menu section, Shortcut Grid Widget owns Shortcut tile/icon UI, Settings Drawer owns settings sections, Toolbar Popup owns popup composition, and shared Shortcut editing UI lives under Shortcut Editor.
 - Folders are created by dragging one Shortcut onto another (gesture-based combine).
 - A Folder always contains at least two Shortcuts; removal that leaves one child promotes it to the page.
 - Deleting a Folder deletes its contained Shortcuts.
@@ -147,7 +148,7 @@ A domain command produced from Drag Intent: `REORDER`, `COMBINE`, `ADD_TO_FOLDER
 - chrome.storage.local for persistence
 - Native HTML drag events
 - Motion (Framer Motion) with reduced motion support
-- Global CSS in `src/ui/styles.css`
+- Global CSS imported through `src/ui/styles.css`; selectors live in Module-owned CSS files beside their UI Modules.
 
 ### Implemented Features
 

@@ -1,6 +1,6 @@
-import { type TabState } from "../domain/tabState";
-import { BackupSettingsSection } from "./settings/BackupSettingsSection";
-import { WallpaperSettingsSection } from "./settings/WallpaperSettingsSection";
+import { type TabState } from "../../domain/tabState";
+import { BackupSettingsSection } from "./BackupSettingsSection";
+import { WallpaperSettingsSection } from "./WallpaperSettingsSection";
 
 type SettingsDrawerProps = {
   backupMessage: string | null;
